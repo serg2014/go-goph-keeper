@@ -1,11 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"net"
+	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime/debug"
 	"sync"
 	"syscall"
@@ -16,6 +25,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 
@@ -50,9 +60,22 @@ func run() error {
 		logger.RPCLogger.Error("recovered from panic", "panic", p, "stack", debug.Stack())
 		return status.Errorf(codes.Internal, "%s", p)
 	}
+
+	// TODO путь из конфига
+	path, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	tlsCreds, err := generateTLSCreds(path)
+	if err != nil {
+		logger.Logger.Error("failed to generate tls creds: %v", err)
+	}
+
 	// grpc server
 	// создаём gRPC-сервер без зарегистрированной службы
 	grpcSrv := grpc.NewServer(
+		// https
+		grpc.Creds(tlsCreds),
 		// Chain interceptors
 		grpc.ChainUnaryInterceptor(
 			logging.UnaryServerInterceptor(interceptorLogger(logger.RPCLogger)),
@@ -121,4 +144,73 @@ func run() error {
 		return err
 	}
 	return nil
+}
+
+func generateTLSCreds(path string) (credentials.TransportCredentials, error) {
+	certPath := filepath.Join(path, "server.crt")
+	keyPath := filepath.Join(path, "server.key")
+	_, errCert := os.Stat(certPath)
+	_, errKey := os.Stat(keyPath)
+	if errCert != nil || errKey != nil {
+		// создаём шаблон сертификата
+		cert := &x509.Certificate{
+			// указываем уникальный номер сертификата
+			SerialNumber: big.NewInt(1658),
+			// заполняем базовую информацию о владельце сертификата
+			Subject: pkix.Name{
+				Organization: []string{"Yandex.Praktikum"},
+				Country:      []string{"RU"},
+			},
+			// разрешаем использование сертификата для 127.0.0.1 и ::1
+			IPAddresses: []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+			// сертификат верен, начиная со времени создания
+			NotBefore: time.Now(),
+			// время жизни сертификата — 10 лет
+			NotAfter:     time.Now().AddDate(10, 0, 0),
+			SubjectKeyId: []byte{1, 2, 3, 4, 6},
+			// устанавливаем использование ключа для цифровой подписи,
+			// а также клиентской и серверной авторизации
+			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+			KeyUsage:    x509.KeyUsageDigitalSignature,
+		}
+
+		// создаём новый приватный RSA-ключ длиной 4096 бит
+		// обратите внимание, что для генерации ключа и сертификата
+		// используется rand.Reader в качестве источника случайных данных
+		privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
+		if err != nil {
+			return nil, err
+		}
+
+		// создаём сертификат x.509
+		certBytes, err := x509.CreateCertificate(rand.Reader, cert, cert, &privateKey.PublicKey, privateKey)
+		if err != nil {
+			return nil, err
+		}
+
+		// кодируем сертификат и ключ в формате PEM, который
+		// используется для хранения и обмена криптографическими ключами
+		var certPEM bytes.Buffer
+		pem.Encode(&certPEM, &pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: certBytes,
+		})
+
+		var privateKeyPEM bytes.Buffer
+		pem.Encode(&privateKeyPEM, &pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+		})
+
+		err = os.WriteFile(certPath, certPEM.Bytes(), 0600)
+		if err != nil {
+			return nil, err
+		}
+
+		err = os.WriteFile(keyPath, privateKeyPEM.Bytes(), 0600)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return credentials.NewServerTLSFromFile(certPath, keyPath)
 }
