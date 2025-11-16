@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package gophkeeper;
+
+option go_package = "github.com/serg2014/go-goph-keeper/cmd/server/proto";
+
+message PingRequest {}
+message PingResponse {}
+service GophKeeperService {
+    rpc Ping(PingRequest) returns (PingResponse);
+}
