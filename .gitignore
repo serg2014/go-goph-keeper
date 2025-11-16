@@ -6,3 +6,7 @@
 
 # macos
 .DS_Store
+
+# autogenereted proto
+cmd/server/proto/keeper.pb.go
+cmd/server/proto/keeper_grpc.pb.go
