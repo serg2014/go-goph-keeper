@@ -16,7 +16,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
-	"sync"
 	"syscall"
 	"time"
 
@@ -30,7 +29,9 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
+	"github.com/serg2014/go-goph-keeper/internal/app"
 	"github.com/serg2014/go-goph-keeper/internal/logger"
+	"github.com/serg2014/go-goph-keeper/internal/storage/database"
 )
 
 //go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative proto/keeper.proto
@@ -55,6 +56,14 @@ func interceptorLogger(l *slog.Logger) logging.Logger {
 func run() error {
 	// Setup logging.
 	logger.Init()
+
+	ctx := context.Background()
+	// TODO conf
+	storage, err := database.NewStorageDB(ctx, "database=postgres sslmode=disable")
+	if err != nil {
+		return err
+	}
+	app := app.NewApp(storage)
 
 	grpcPanicRecoveryHandler := func(p any) (err error) {
 		logger.RPCLogger.Error("recovered from panic", "panic", p, "stack", debug.Stack())
@@ -83,46 +92,12 @@ func run() error {
 		),
 	)
 	// регистрируем сервис
-	pb.RegisterGophKeeperServiceServer(grpcSrv, &GrpcServer{})
+	pb.RegisterGophKeeperServiceServer(grpcSrv, &GrpcServer{app: app})
 	reflection.Register(grpcSrv) // Enable reflection for tools like grpcurl
 
-	var wg sync.WaitGroup
-	wg.Add(1)
 	// горутина обрабатывающая прерывания syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT
 	go func() {
-		defer wg.Done()
-		// создаем контекст, который будет отменен при получении сигнала
-		ctxS, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-		defer stop()
-
-		select {
-		// 	ждем сигнала от ОС
-		case <-ctxS.Done():
-			logger.Logger.Info("catch signal")
-		}
-
-		ctxT, cancelT := context.WithTimeout(context.Background(), waitSecBeforeShutdown)
-		defer cancelT()
-
-		grp := new(errgroup.Group)
-		grp.Go(func() error {
-			logger.Logger.Info("Gracefull shutdown grpc server")
-			// GracefulStop блокирующая операция
-			grpcSrv.GracefulStop()
-			// отменяем таймаут
-			cancelT()
-			return nil
-		})
-		grp.Go(func() error {
-			<-ctxT.Done()
-			if ctxT.Err() == context.DeadlineExceeded {
-				logger.Logger.Info("Force shutdown grpc server")
-				grpcSrv.Stop()
-			}
-			return nil
-		})
-		// ожидаем завершения работы сервера
-		grp.Wait()
+		gracefullShutdown(context.Background(), grpcSrv)
 	}()
 
 	grp := new(errgroup.Group)
@@ -144,6 +119,41 @@ func run() error {
 		return err
 	}
 	return nil
+}
+
+func gracefullShutdown(ctx context.Context, grpcSrv *grpc.Server) {
+	// создаем контекст, который будет отменен при получении сигнала
+	ctxS, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer stop()
+
+	select {
+	// 	ждем сигнала от ОС
+	case <-ctxS.Done():
+		logger.Logger.Info("catch signal")
+	}
+
+	ctxT, cancelT := context.WithTimeout(ctx, waitSecBeforeShutdown)
+	defer cancelT()
+
+	grp := new(errgroup.Group)
+	grp.Go(func() error {
+		logger.Logger.Info("Gracefull shutdown grpc server")
+		// GracefulStop блокирующая операция
+		grpcSrv.GracefulStop()
+		// отменяем таймаут
+		cancelT()
+		return nil
+	})
+	grp.Go(func() error {
+		<-ctxT.Done()
+		if ctxT.Err() == context.DeadlineExceeded {
+			logger.Logger.Info("Force shutdown grpc server")
+			grpcSrv.Stop()
+		}
+		return nil
+	})
+	// ожидаем завершения работы сервера
+	grp.Wait()
 }
 
 func generateTLSCreds(path string) (credentials.TransportCredentials, error) {
