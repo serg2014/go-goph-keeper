@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/app"
+	"github.com/serg2014/go-goph-keeper/internal/auth"
 	"github.com/serg2014/go-goph-keeper/internal/logger"
 	"github.com/serg2014/go-goph-keeper/internal/storage"
 	"google.golang.org/grpc/codes"
@@ -42,10 +44,9 @@ func (s *GrpcServer) RegisterUser(ctx context.Context, request *pb.RegisterUserR
 		return nil, status.Error(code, ErrMessageEmptyPassword)
 	}
 
-	// TODO use userID
-	_, err := s.app.CreateUser(ctx, request.Login, request.Password)
+	userID, err := s.app.CreateUser(ctx, request.Login, request.Password)
 	if err != nil {
-		logger.Logger.Info("CreateUser", err.Error())
+		logger.Logger.Info("CreateUser", slog.String("error", err.Error()))
 		if errors.Is(err, storage.ErrUserExists) {
 			return nil, status.Error(codes.InvalidArgument, "user exists")
 		}
@@ -54,6 +55,42 @@ func (s *GrpcServer) RegisterUser(ctx context.Context, request *pb.RegisterUserR
 		return nil, status.Error(code, code.String())
 	}
 
-	// TODO set meta
-	return &pb.RegisterUserResponse{}, nil
+	jwt, err := auth.BuildJWTString(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.RegisterUserResponse{
+		Token: &pb.JWTToken{Token: jwt},
+	}, nil
+}
+
+func (s *GrpcServer) AuthUser(ctx context.Context, request *pb.AuthUserRequest) (*pb.AuthUserResponse, error) {
+	if request.Login == "" {
+		code := codes.InvalidArgument
+		return nil, status.Error(code, ErrMessageEmptyLogin)
+	}
+	if request.Password == "" {
+		code := codes.InvalidArgument
+		return nil, status.Error(code, ErrMessageEmptyPassword)
+	}
+
+	userID, err := s.app.GetUser(ctx, request.Login, request.Password)
+	if err != nil {
+		if errors.Is(err, storage.ErrUserOrPassword) {
+			return nil, status.Error(codes.InvalidArgument, "bad user or password")
+		}
+		logger.Logger.Error("AuthUser", slog.String("error", err.Error()))
+		code := codes.Internal
+		return nil, status.Error(code, code.String())
+	}
+
+	jwt, err := auth.BuildJWTString(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.AuthUserResponse{
+		Token: &pb.JWTToken{Token: jwt},
+	}, nil
 }

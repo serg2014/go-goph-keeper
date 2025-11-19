@@ -25,3 +25,7 @@ func (app *MyApp) Ping(ctx context.Context) error {
 func (app *MyApp) CreateUser(ctx context.Context, login, password string) (*models.UserID, error) {
 	return app.store.CreateUser(ctx, login, auth.SignPassword(password))
 }
+
+func (app *MyApp) GetUser(ctx context.Context, login, password string) (*models.UserID, error) {
+	return app.store.GetUser(ctx, login, auth.SignPassword(password))
+}

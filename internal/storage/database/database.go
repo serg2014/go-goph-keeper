@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/google/uuid"
 	"github.com/serg2014/go-goph-keeper/internal/logger"
 	"github.com/serg2014/go-goph-keeper/internal/models"
 	"github.com/serg2014/go-goph-keeper/internal/storage"
@@ -70,7 +69,7 @@ func (s *storageDB) CreateUser(ctx context.Context, login, passwordHash string) 
 
 	query := `INSERT INTO users (login, hash) VALUES($1, $2) RETURNING user_id`
 	row := tx.QueryRowContext(ctx, query, login, passwordHash)
-	var userID uuid.UUID
+	var userID models.UserID
 	err = row.Scan(&userID)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -86,6 +85,19 @@ func (s *storageDB) CreateUser(ctx context.Context, login, passwordHash string) 
 	if err != nil {
 		return nil, fmt.Errorf("failed commit transaction: %w", err)
 	}
-	muid := models.UserID(userID)
-	return &muid, nil
+	return &userID, nil
+}
+
+func (s *storageDB) GetUser(ctx context.Context, login, passwordHash string) (*models.UserID, error) {
+	query := `SELECT user_id FROM users WHERE login=$1 AND hash=$2`
+	row := s.db.QueryRowContext(ctx, query, login, passwordHash)
+	var userID models.UserID
+	err := row.Scan(&userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, storage.ErrUserOrPassword
+		}
+		return nil, fmt.Errorf("failed GetUser. can not select: %w", err)
+	}
+	return &userID, nil
 }

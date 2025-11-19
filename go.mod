@@ -5,6 +5,7 @@ go 1.24.1
 replace github.com/serg2014/go-goph-keeper => ./
 
 require (
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/golang-migrate/migrate v3.5.4+incompatible
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3

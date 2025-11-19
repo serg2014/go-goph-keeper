@@ -1,13 +1,52 @@
 package auth
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/serg2014/go-goph-keeper/internal/models"
 )
 
-// TODO from env
-var secretForPassword = []byte("somesecret")
+const (
+	tokenExpire = 3 * time.Hour
+	// TODO from env
+	secretForToken = "secretfortoken"
+	// TODO from env
+	secretForPassword = "somesecret"
+)
+
+var (
+	ErrTokenNotValid         = errors.New("jwt token not valid")
+	ErrTokenBadSigningMethod = errors.New("unexpected signing method")
+
+	// ErrUserIDFromContext error when no userid in context
+	ErrUserIDFromContext = fmt.Errorf("no userid in context")
+)
+
+type userCtxKeyType string
+
+const userCtxKey userCtxKeyType = "userID"
+
+// WithUser helper set userid in context
+func WithUser(ctx context.Context, userID *models.UserID) context.Context {
+	return context.WithValue(ctx, userCtxKey, userID)
+}
+
+// GetUserID get userid from context
+// TODO ptr
+func GetUserIDFromContext(ctx context.Context) (*models.UserID, error) {
+	userID, ok := ctx.Value(userCtxKey).(*models.UserID)
+	if !ok {
+		return nil, ErrUserIDFromContext
+	}
+	return userID, nil
+}
 
 func sign(value, key []byte) string {
 	h := hmac.New(sha256.New, key)
@@ -16,5 +55,57 @@ func sign(value, key []byte) string {
 }
 
 func SignPassword(password string) string {
-	return sign([]byte(password), secretForPassword)
+	return sign([]byte(password), []byte(secretForPassword))
+}
+
+// Claims — структура утверждений, которая включает стандартные утверждения
+// и одно пользовательское — UserID
+type Claims struct {
+	jwt.RegisteredClaims
+	UserID *models.UserID
+}
+
+// BuildJWTString создаёт токен и возвращает его в виде строки.
+func BuildJWTString(userID *models.UserID) (string, error) {
+	// создаём новый токен с алгоритмом подписи HS256 и утверждениями — Claims
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			// когда создан токен
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenExpire)),
+		},
+		// собственное утверждение
+		UserID: userID,
+	})
+
+	// создаём строку токена
+	tokenString, err := token.SignedString([]byte(secretForToken))
+	if err != nil {
+		return "", err
+	}
+
+	// возвращаем строку токена
+	return tokenString, nil
+}
+
+func GetUserIDFromToken(tokenString string) (*models.UserID, error) {
+	// создаём экземпляр структуры с утверждениями
+	claims := &Claims{}
+	// парсим из строки токена tokenString в структуру claims
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		claims,
+		func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("%w: %v", ErrTokenBadSigningMethod, t.Header["alg"])
+			}
+			return []byte(secretForToken), nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	if !token.Valid {
+		return nil, ErrTokenNotValid
+	}
+	// возвращаем ID пользователя в читаемом виде
+	return claims.UserID, nil
 }

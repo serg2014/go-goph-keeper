@@ -19,8 +19,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
+	authinterceptors "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/auth"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/selector"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -30,6 +33,7 @@ import (
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/app"
+	"github.com/serg2014/go-goph-keeper/internal/auth"
 	"github.com/serg2014/go-goph-keeper/internal/logger"
 	"github.com/serg2014/go-goph-keeper/internal/storage/database"
 )
@@ -80,6 +84,33 @@ func run() error {
 		logger.Logger.Error("failed to generate tls creds: %v", err)
 	}
 
+	// Setup custom auth.
+	authFn := func(ctx context.Context) (context.Context, error) {
+		token, err := authinterceptors.AuthFromMD(ctx, "bearer")
+		if err != nil {
+			return nil, err
+		}
+		userID, err := auth.GetUserIDFromToken(token)
+		if err != nil {
+			return nil, status.Error(codes.Unauthenticated, "invalid auth token")
+		}
+		return auth.WithUser(ctx, userID), nil
+	}
+
+	// Setup auth matcher.
+	allButHealthZ := func(ctx context.Context, callMeta interceptors.CallMeta) bool {
+		// logger.Logger.Info(
+		// 	callMeta.Service,
+		// 	slog.String("method", callMeta.Method),
+		// 	slog.String("fullmethod", callMeta.FullMethod()),
+		// 	slog.String("pb service", pb.GophKeeperService_ServiceDesc.ServiceName),
+		// 	slog.String("pb method", pb.GophKeeperService_Ping_FullMethodName),
+		// )
+
+		//return pb.GophKeeperService_ServiceDesc.ServiceName == callMeta.Service
+		return pb.GophKeeperService_Ping_FullMethodName == callMeta.FullMethod()
+	}
+
 	// grpc server
 	// создаём gRPC-сервер без зарегистрированной службы
 	grpcSrv := grpc.NewServer(
@@ -88,6 +119,7 @@ func run() error {
 		// Chain interceptors
 		grpc.ChainUnaryInterceptor(
 			logging.UnaryServerInterceptor(interceptorLogger(logger.RPCLogger)),
+			selector.UnaryServerInterceptor(authinterceptors.UnaryServerInterceptor(authFn), selector.MatchFunc(allButHealthZ)),
 			recovery.UnaryServerInterceptor(recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 	)

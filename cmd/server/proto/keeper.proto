@@ -11,9 +11,21 @@ message RegisterUserRequest{
     string login = 1;
     string password = 2;
 }
-message RegisterUserResponse{}
-
+message JWTToken {
+    string token = 1;
+}
+message RegisterUserResponse{
+    JWTToken token = 1;
+}
+message AuthUserRequest{
+    string login = 1;
+    string password = 2;
+}
+message AuthUserResponse{
+    JWTToken token = 1;
+}
 service GophKeeperService {
     rpc Ping(PingRequest) returns (PingResponse);
     rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse);
+    rpc AuthUser(AuthUserRequest) returns (AuthUserResponse);
 }
