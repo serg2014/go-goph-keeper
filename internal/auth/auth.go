@@ -39,7 +39,6 @@ func WithUser(ctx context.Context, userID *models.UserID) context.Context {
 }
 
 // GetUserID get userid from context
-// TODO ptr
 func GetUserIDFromContext(ctx context.Context) (*models.UserID, error) {
 	userID, ok := ctx.Value(userCtxKey).(*models.UserID)
 	if !ok {
