@@ -33,10 +33,10 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
-	"github.com/serg2014/go-goph-keeper/internal/app"
-	"github.com/serg2014/go-goph-keeper/internal/auth"
-	"github.com/serg2014/go-goph-keeper/internal/logger"
-	"github.com/serg2014/go-goph-keeper/internal/storage/database"
+	"github.com/serg2014/go-goph-keeper/internal/server/app"
+	"github.com/serg2014/go-goph-keeper/internal/server/auth"
+	"github.com/serg2014/go-goph-keeper/internal/server/logger"
+	"github.com/serg2014/go-goph-keeper/internal/server/storage/database"
 )
 
 //go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative proto/keeper.proto
@@ -82,7 +82,7 @@ func run() error {
 	}
 	tlsCreds, err := generateTLSCreds(path)
 	if err != nil {
-		logger.Logger.Error("failed to generate tls creds: %v", err)
+		logger.Logger.Error("failed to generate tls creds: ", slog.String("error", err.Error()))
 	}
 
 	// Setup custom auth.

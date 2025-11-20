@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/serg2014/go-goph-keeper/internal/models"
+	"github.com/serg2014/go-goph-keeper/internal/server/models"
 )
 
 // Claims — структура утверждений, которая включает стандартные утверждения

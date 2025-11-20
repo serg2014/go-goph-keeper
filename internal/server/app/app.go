@@ -3,9 +3,9 @@ package app
 import (
 	"context"
 
-	"github.com/serg2014/go-goph-keeper/internal/auth"
-	"github.com/serg2014/go-goph-keeper/internal/models"
-	"github.com/serg2014/go-goph-keeper/internal/storage"
+	"github.com/serg2014/go-goph-keeper/internal/server/auth"
+	"github.com/serg2014/go-goph-keeper/internal/server/models"
+	"github.com/serg2014/go-goph-keeper/internal/server/storage"
 )
 
 type MyApp struct {

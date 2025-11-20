@@ -6,10 +6,10 @@ import (
 	"log/slog"
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
-	"github.com/serg2014/go-goph-keeper/internal/app"
-	"github.com/serg2014/go-goph-keeper/internal/auth"
-	"github.com/serg2014/go-goph-keeper/internal/logger"
-	"github.com/serg2014/go-goph-keeper/internal/storage"
+	"github.com/serg2014/go-goph-keeper/internal/server/app"
+	"github.com/serg2014/go-goph-keeper/internal/server/auth"
+	"github.com/serg2014/go-goph-keeper/internal/server/logger"
+	"github.com/serg2014/go-goph-keeper/internal/server/storage"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

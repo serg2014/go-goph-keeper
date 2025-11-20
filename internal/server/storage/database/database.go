@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/golang-migrate/migrate"
 	"github.com/golang-migrate/migrate/database/postgres"
@@ -13,9 +14,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/serg2014/go-goph-keeper/internal/logger"
-	"github.com/serg2014/go-goph-keeper/internal/models"
-	"github.com/serg2014/go-goph-keeper/internal/storage"
+	"github.com/serg2014/go-goph-keeper/internal/server/logger"
+	"github.com/serg2014/go-goph-keeper/internal/server/models"
+	"github.com/serg2014/go-goph-keeper/internal/server/storage"
 )
 
 type storageDB struct {
@@ -44,7 +45,7 @@ func NewStorageDB(ctx context.Context, dsn string) (storage.Storager, error) {
 	// TODO file://migrations путь задается относительно cwd
 	// предполагается что запуск бинаря происходит в корне репозитория
 	m, err := migrate.NewWithDatabaseInstance(
-		"file://migrations",
+		"file://migrations/server",
 		dsn,
 		driver,
 	)
@@ -52,7 +53,7 @@ func NewStorageDB(ctx context.Context, dsn string) (storage.Storager, error) {
 		return nil, err
 	}
 	if err = m.Up(); err != nil && err != migrate.ErrNoChange {
-		logger.Logger.Error("failed to apply migrations", err)
+		logger.Logger.Error("failed to apply migrations", slog.String("error", err.Error()))
 		return nil, err
 	}
 

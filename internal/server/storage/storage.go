@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/serg2014/go-goph-keeper/internal/models"
+	"github.com/serg2014/go-goph-keeper/internal/server/models"
 )
 
 var (

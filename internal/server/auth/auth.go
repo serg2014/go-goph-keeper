@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/serg2014/go-goph-keeper/internal/models"
+	"github.com/serg2014/go-goph-keeper/internal/server/models"
 )
 
 const (
