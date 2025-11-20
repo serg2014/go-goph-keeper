@@ -100,6 +100,20 @@ func GetUserIDFromToken(tokenString string) (*models.UserID, error) {
 			return []byte(secretForToken), nil
 		})
 	if err != nil {
+		//
+		// switch {
+		// case errors.Is(err, jwt.ErrTokenMalformed):
+		// 	fmt.Println("That's not even a token")
+		// case errors.Is(err, jwt.ErrTokenSignatureInvalid):
+		// 	// Invalid signature
+		// 	fmt.Println("Invalid signature")
+		// case errors.Is(err, jwt.ErrTokenExpired) || errors.Is(err, jwt.ErrTokenNotValidYet):
+		// 	// Token is either expired or not active yet
+		// 	fmt.Println("Timing is everything")
+		// default:
+		// 	fmt.Println("Couldn't handle this token:", err)
+		// }
+
 		return nil, err
 	}
 	if !token.Valid {

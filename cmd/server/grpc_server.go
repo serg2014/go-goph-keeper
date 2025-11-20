@@ -21,6 +21,7 @@ const (
 
 // GrpcServer struct for grpc server
 type GrpcServer struct {
+	pb.UnimplementedAuthServiceServer
 	pb.UnimplementedGophKeeperServiceServer
 
 	app *app.MyApp

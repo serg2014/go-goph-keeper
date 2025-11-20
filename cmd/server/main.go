@@ -107,8 +107,8 @@ func run() error {
 		// 	slog.String("pb method", pb.GophKeeperService_Ping_FullMethodName),
 		// )
 
-		//return pb.GophKeeperService_ServiceDesc.ServiceName == callMeta.Service
-		return pb.GophKeeperService_Ping_FullMethodName == callMeta.FullMethod()
+		return pb.GophKeeperService_ServiceDesc.ServiceName == callMeta.Service
+		//return pb.GophKeeperService_Ping_FullMethodName == callMeta.FullMethod()
 	}
 
 	// grpc server
@@ -123,8 +123,10 @@ func run() error {
 			recovery.UnaryServerInterceptor(recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 	)
-	// регистрируем сервис
-	pb.RegisterGophKeeperServiceServer(grpcSrv, &GrpcServer{app: app})
+	// регистрируем сервисы
+	grpcs := &GrpcServer{app: app}
+	pb.RegisterAuthServiceServer(grpcSrv, grpcs)
+	pb.RegisterGophKeeperServiceServer(grpcSrv, grpcs)
 	reflection.Register(grpcSrv) // Enable reflection for tools like grpcurl
 
 	// горутина обрабатывающая прерывания syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT

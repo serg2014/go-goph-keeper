@@ -24,8 +24,12 @@ message AuthUserRequest{
 message AuthUserResponse{
     JWTToken token = 1;
 }
-service GophKeeperService {
-    rpc Ping(PingRequest) returns (PingResponse);
+
+service AuthService {
     rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse);
     rpc AuthUser(AuthUserRequest) returns (AuthUserResponse);
+}
+
+service GophKeeperService {
+    rpc Ping(PingRequest) returns (PingResponse);
 }
