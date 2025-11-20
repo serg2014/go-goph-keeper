@@ -116,27 +116,9 @@ func GetUserIDFromToken(tokenString string) (*models.UserID, bool, error) {
 		return claims.UserID, claims.IsRefresh, nil
 	}
 
-	// switch {
-	// case errors.Is(err, jwt.ErrTokenMalformed):
-	// 	logger.Logger.Info("That's not even a token")
-	// case errors.Is(err, jwt.ErrTokenSignatureInvalid):
-	// 	// Invalid signature
-	// 	logger.Logger.Info("Invalid signature")
-	// case errors.Is(err, jwt.ErrTokenExpired) || errors.Is(err, jwt.ErrTokenNotValidYet):
-	// 	// Token is either expired or not active yet
-	// 	logger.Logger.Info("Timing is everything")
-	// default:
-	// 	logger.Logger.Info("Couldn't handle this token:", slog.String("error", err.Error()))
-	// }
 	if errors.Is(err, jwt.ErrTokenExpired) {
 		return nil, claims.IsRefresh, ErrTokenExpired
 	}
 
 	return nil, claims.IsRefresh, err
-
-	// if !token.Valid {
-	// 	return nil, claims.IsRefresh, ErrTokenNotValid
-	// }
-	// возвращаем ID пользователя в читаемом виде
-	//return claims.UserID, claims.IsRefresh, nil
 }
