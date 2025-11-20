@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	tokenExpire        = 15 * time.Minute
+	accessTokenExpire  = 15 * time.Minute
 	refreshTokenExpire = 1 * time.Hour
 	// TODO from env
 	secretForToken = "secretfortoken"
@@ -66,20 +66,21 @@ type Claims struct {
 	IsRefresh bool
 }
 
-// BuildJWTString создаёт токен и возвращает его в виде строки.
-func BuildJWTString(userID *models.UserID) (string, error) {
-	return buildJWTString(userID, tokenExpire, false)
+// BuildAccessJWT создаёт access токен и возвращает его в виде строки.
+func BuildAccessJWT(userID *models.UserID) (string, error) {
+	return buildJWT(userID, accessTokenExpire, false)
 }
 
-func BuildJWTRefreshString(userID *models.UserID) (string, error) {
-	return buildJWTString(userID, refreshTokenExpire, true)
+// BuildAccessJWT создаёт refresh токен и возвращает его в виде строки.
+func BuildRefreshJWT(userID *models.UserID) (string, error) {
+	return buildJWT(userID, refreshTokenExpire, true)
 }
 
-func buildJWTString(userID *models.UserID, expire time.Duration, refresh bool) (string, error) {
+func buildJWT(userID *models.UserID, expire time.Duration, refresh bool) (string, error) {
 	// создаём новый токен с алгоритмом подписи HS256 и утверждениями — Claims
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
-			// когда создан токен
+			// когда токен перестанет быть валидным
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expire)),
 		},
 		// собственное утверждение

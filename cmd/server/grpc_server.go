@@ -56,18 +56,18 @@ func (s *GrpcServer) RegisterUser(ctx context.Context, request *pb.RegisterUserR
 		return nil, status.Error(code, code.String())
 	}
 
-	jwt, err := auth.BuildJWTString(userID)
+	jwt, err := auth.BuildAccessJWT(userID)
 	if err != nil {
 		return nil, err
 	}
-	jwtRefresh, err := auth.BuildJWTRefreshString(userID)
+	jwtRefresh, err := auth.BuildRefreshJWT(userID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &pb.RegisterUserResponse{
-		Token:        &pb.JWTToken{Token: jwt},
-		RefreshToken: &pb.JWTToken{Token: jwtRefresh},
+		Access:  &pb.JWTToken{Token: jwt},
+		Refresh: &pb.JWTToken{Token: jwtRefresh},
 	}, nil
 }
 
@@ -91,18 +91,18 @@ func (s *GrpcServer) AuthUser(ctx context.Context, request *pb.AuthUserRequest) 
 		return nil, status.Error(code, code.String())
 	}
 
-	jwt, err := auth.BuildJWTString(userID)
+	jwt, err := auth.BuildAccessJWT(userID)
 	if err != nil {
 		return nil, err
 	}
-	jwtRefresh, err := auth.BuildJWTRefreshString(userID)
+	jwtRefresh, err := auth.BuildRefreshJWT(userID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &pb.AuthUserResponse{
-		Token:        &pb.JWTToken{Token: jwt},
-		RefreshToken: &pb.JWTToken{Token: jwtRefresh},
+		Access:  &pb.JWTToken{Token: jwt},
+		Refresh: &pb.JWTToken{Token: jwtRefresh},
 	}, nil
 }
 
@@ -112,12 +112,17 @@ func (s *GrpcServer) RenewAuth(ctx context.Context, request *pb.RenewAuthRequest
 		return nil, err
 	}
 
-	jwt, err := auth.BuildJWTString(userID)
+	jwt, err := auth.BuildAccessJWT(userID)
+	if err != nil {
+		return nil, err
+	}
+	jwtRefresh, err := auth.BuildRefreshJWT(userID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &pb.RenewAuthResponse{
-		Token: &pb.JWTToken{Token: jwt},
+		Access:  &pb.JWTToken{Token: jwt},
+		Refresh: &pb.JWTToken{Token: jwtRefresh},
 	}, nil
 }

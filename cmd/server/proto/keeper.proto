@@ -12,21 +12,22 @@ message JWTToken {
     string token = 1;
 }
 message RegisterUserResponse{
-    JWTToken token = 1;
-    JWTToken refresh_token = 2;
+    JWTToken access = 1;
+    JWTToken refresh = 2;
 }
 message AuthUserRequest{
     string login = 1;
     string password = 2;
 }
 message AuthUserResponse{
-    JWTToken token = 1;
-    JWTToken refresh_token = 2;
+    JWTToken access = 1;
+    JWTToken refresh = 2;
 }
 
 message RenewAuthRequest{}
 message RenewAuthResponse {
-    JWTToken token = 1;
+    JWTToken access = 1;
+    JWTToken refresh = 2;
 }
 service AuthService {
     rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse);
