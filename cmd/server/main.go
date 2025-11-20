@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -90,13 +91,15 @@ func run() error {
 		if err != nil {
 			return nil, err
 		}
-		userID, err := auth.GetUserIDFromToken(token)
-		if err != nil {
+		userID, isRefresh, err := auth.GetUserIDFromToken(token)
+		if err != nil || isRefresh {
+			if errors.Is(err, auth.ErrTokenExpired) {
+				return nil, status.Error(codes.Unauthenticated, "expired token")
+			}
 			return nil, status.Error(codes.Unauthenticated, "invalid auth token")
 		}
 		return auth.WithUser(ctx, userID), nil
 	}
-
 	// Setup auth matcher.
 	allButHealthZ := func(ctx context.Context, callMeta interceptors.CallMeta) bool {
 		// logger.Logger.Info(
@@ -111,6 +114,26 @@ func run() error {
 		//return pb.GophKeeperService_Ping_FullMethodName == callMeta.FullMethod()
 	}
 
+	// Setup custom auth.
+	authRefreshFn := func(ctx context.Context) (context.Context, error) {
+		token, err := authinterceptors.AuthFromMD(ctx, "bearer")
+		if err != nil {
+			return nil, err
+		}
+		userID, isRefresh, err := auth.GetUserIDFromToken(token)
+		if err != nil || !isRefresh {
+			if errors.Is(err, auth.ErrTokenExpired) {
+				return nil, status.Error(codes.Unauthenticated, "expired token")
+			}
+			return nil, status.Error(codes.Unauthenticated, "invalid auth token")
+		}
+		return auth.WithUser(ctx, userID), nil
+	}
+	// Setup auth matcher.
+	refreshMatcher := func(ctx context.Context, callMeta interceptors.CallMeta) bool {
+		return pb.AuthService_RenewAuth_FullMethodName == callMeta.FullMethod()
+	}
+
 	// grpc server
 	// создаём gRPC-сервер без зарегистрированной службы
 	grpcSrv := grpc.NewServer(
@@ -120,6 +143,7 @@ func run() error {
 		grpc.ChainUnaryInterceptor(
 			logging.UnaryServerInterceptor(interceptorLogger(logger.RPCLogger)),
 			selector.UnaryServerInterceptor(authinterceptors.UnaryServerInterceptor(authFn), selector.MatchFunc(allButHealthZ)),
+			selector.UnaryServerInterceptor(authinterceptors.UnaryServerInterceptor(authRefreshFn), selector.MatchFunc(refreshMatcher)),
 			recovery.UnaryServerInterceptor(recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 	)

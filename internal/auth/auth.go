@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	tokenExpire = 3 * time.Hour
+	tokenExpire        = 15 * time.Minute
+	refreshTokenExpire = 1 * time.Hour
 	// TODO from env
 	secretForToken = "secretfortoken"
 	// TODO from env
@@ -22,7 +23,7 @@ const (
 )
 
 var (
-	ErrTokenNotValid         = errors.New("jwt token not valid")
+	ErrTokenExpired          = errors.New("jwt token is expired")
 	ErrTokenBadSigningMethod = errors.New("unexpected signing method")
 
 	// ErrUserIDFromContext error when no userid in context
@@ -61,19 +62,29 @@ func SignPassword(password string) string {
 // и одно пользовательское — UserID
 type Claims struct {
 	jwt.RegisteredClaims
-	UserID *models.UserID
+	UserID    *models.UserID
+	IsRefresh bool
 }
 
 // BuildJWTString создаёт токен и возвращает его в виде строки.
 func BuildJWTString(userID *models.UserID) (string, error) {
+	return buildJWTString(userID, tokenExpire, false)
+}
+
+func BuildJWTRefreshString(userID *models.UserID) (string, error) {
+	return buildJWTString(userID, refreshTokenExpire, true)
+}
+
+func buildJWTString(userID *models.UserID, expire time.Duration, refresh bool) (string, error) {
 	// создаём новый токен с алгоритмом подписи HS256 и утверждениями — Claims
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			// когда создан токен
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenExpire)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expire)),
 		},
 		// собственное утверждение
-		UserID: userID,
+		UserID:    userID,
+		IsRefresh: refresh,
 	})
 
 	// создаём строку токена
@@ -86,7 +97,7 @@ func BuildJWTString(userID *models.UserID) (string, error) {
 	return tokenString, nil
 }
 
-func GetUserIDFromToken(tokenString string) (*models.UserID, error) {
+func GetUserIDFromToken(tokenString string) (*models.UserID, bool, error) {
 	// создаём экземпляр структуры с утверждениями
 	claims := &Claims{}
 	// парсим из строки токена tokenString в структуру claims
@@ -99,26 +110,33 @@ func GetUserIDFromToken(tokenString string) (*models.UserID, error) {
 			}
 			return []byte(secretForToken), nil
 		})
-	if err != nil {
-		//
-		// switch {
-		// case errors.Is(err, jwt.ErrTokenMalformed):
-		// 	fmt.Println("That's not even a token")
-		// case errors.Is(err, jwt.ErrTokenSignatureInvalid):
-		// 	// Invalid signature
-		// 	fmt.Println("Invalid signature")
-		// case errors.Is(err, jwt.ErrTokenExpired) || errors.Is(err, jwt.ErrTokenNotValidYet):
-		// 	// Token is either expired or not active yet
-		// 	fmt.Println("Timing is everything")
-		// default:
-		// 	fmt.Println("Couldn't handle this token:", err)
-		// }
 
-		return nil, err
+	if token.Valid {
+		// возвращаем ID пользователя в читаемом виде
+		return claims.UserID, claims.IsRefresh, nil
 	}
-	if !token.Valid {
-		return nil, ErrTokenNotValid
+
+	// switch {
+	// case errors.Is(err, jwt.ErrTokenMalformed):
+	// 	logger.Logger.Info("That's not even a token")
+	// case errors.Is(err, jwt.ErrTokenSignatureInvalid):
+	// 	// Invalid signature
+	// 	logger.Logger.Info("Invalid signature")
+	// case errors.Is(err, jwt.ErrTokenExpired) || errors.Is(err, jwt.ErrTokenNotValidYet):
+	// 	// Token is either expired or not active yet
+	// 	logger.Logger.Info("Timing is everything")
+	// default:
+	// 	logger.Logger.Info("Couldn't handle this token:", slog.String("error", err.Error()))
+	// }
+	if errors.Is(err, jwt.ErrTokenExpired) {
+		return nil, claims.IsRefresh, ErrTokenExpired
 	}
+
+	return nil, claims.IsRefresh, err
+
+	// if !token.Valid {
+	// 	return nil, claims.IsRefresh, ErrTokenNotValid
+	// }
 	// возвращаем ID пользователя в читаемом виде
-	return claims.UserID, nil
+	//return claims.UserID, claims.IsRefresh, nil
 }

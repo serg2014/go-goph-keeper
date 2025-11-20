@@ -4,9 +4,6 @@ package gophkeeper;
 
 option go_package = "github.com/serg2014/go-goph-keeper/cmd/server/proto";
 
-message PingRequest {}
-message PingResponse {}
-
 message RegisterUserRequest{
     string login = 1;
     string password = 2;
@@ -16,6 +13,7 @@ message JWTToken {
 }
 message RegisterUserResponse{
     JWTToken token = 1;
+    JWTToken refresh_token = 2;
 }
 message AuthUserRequest{
     string login = 1;
@@ -23,12 +21,21 @@ message AuthUserRequest{
 }
 message AuthUserResponse{
     JWTToken token = 1;
+    JWTToken refresh_token = 2;
 }
 
+message RenewAuthRequest{}
+message RenewAuthResponse {
+    JWTToken token = 1;
+}
 service AuthService {
     rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse);
     rpc AuthUser(AuthUserRequest) returns (AuthUserResponse);
+    rpc RenewAuth(RenewAuthRequest) returns (RenewAuthResponse);
 }
+
+message PingRequest {}
+message PingResponse {}
 
 service GophKeeperService {
     rpc Ping(PingRequest) returns (PingResponse);

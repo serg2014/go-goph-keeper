@@ -60,9 +60,14 @@ func (s *GrpcServer) RegisterUser(ctx context.Context, request *pb.RegisterUserR
 	if err != nil {
 		return nil, err
 	}
+	jwtRefresh, err := auth.BuildJWTRefreshString(userID)
+	if err != nil {
+		return nil, err
+	}
 
 	return &pb.RegisterUserResponse{
-		Token: &pb.JWTToken{Token: jwt},
+		Token:        &pb.JWTToken{Token: jwt},
+		RefreshToken: &pb.JWTToken{Token: jwtRefresh},
 	}, nil
 }
 
@@ -90,8 +95,29 @@ func (s *GrpcServer) AuthUser(ctx context.Context, request *pb.AuthUserRequest) 
 	if err != nil {
 		return nil, err
 	}
+	jwtRefresh, err := auth.BuildJWTRefreshString(userID)
+	if err != nil {
+		return nil, err
+	}
 
 	return &pb.AuthUserResponse{
+		Token:        &pb.JWTToken{Token: jwt},
+		RefreshToken: &pb.JWTToken{Token: jwtRefresh},
+	}, nil
+}
+
+func (s *GrpcServer) RenewAuth(ctx context.Context, request *pb.RenewAuthRequest) (*pb.RenewAuthResponse, error) {
+	userID, err := auth.GetUserIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	jwt, err := auth.BuildJWTString(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.RenewAuthResponse{
 		Token: &pb.JWTToken{Token: jwt},
 	}, nil
 }
