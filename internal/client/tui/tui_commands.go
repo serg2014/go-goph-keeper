@@ -74,7 +74,7 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 func addSecret(ctx context.Context, app *app.ClientApp) error {
 	var secretType models.SecretType
 	opts := make([]huh.Option[models.SecretType], 0, models.SecretTypeMax)
-	for i := 0; i < int(CommandTypeMax); i++ {
+	for i := 0; i < int(models.SecretTypeMax); i++ {
 		str := models.SecretType(i).String()
 		if str != "" {
 			opts = append(opts, huh.NewOption(str, models.SecretType(i)))
