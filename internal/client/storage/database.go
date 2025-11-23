@@ -64,6 +64,9 @@ func (s *storageDB) UpdateSecret(ctx context.Context, secretDB *models.SecretDB)
 	}
 	defer tx.Rollback()
 
+	//strftime('%s', '2025-11-23 17:27:00')
+	//t := time.Now
+
 	query := `UPDATE meta SET data=?, updated_at=strftime('%s', 'now'), need_update=?
 	WHERE secret_id=?`
 	need_update := 0
@@ -75,11 +78,13 @@ func (s *storageDB) UpdateSecret(ctx context.Context, secretDB *models.SecretDB)
 		return err
 	}
 
-	query = `UPDATE data SET data=?, updated_at=strftime('%s', 'now'), need_update=?
-	WHERE secret_id=?`
-	_, err = s.db.ExecContext(ctx, query, secretDB.Data, need_update, secretDB.ID)
-	if err != nil {
-		return err
+	if len(secretDB.Data) != 0 {
+		query = `UPDATE data SET data=?, updated_at=strftime('%s', 'now'), need_update=? 
+		WHERE secret_id=?`
+		_, err = s.db.ExecContext(ctx, query, secretDB.Data, need_update, secretDB.ID)
+		if err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()
@@ -125,6 +130,9 @@ func (s *storageDB) AddSecret(ctx context.Context, secretDB *models.SecretDB) er
 
 	query = `INSERT INTO meta (id, secret_id, data) VALUES(?,?,?)`
 	_, err = tx.ExecContext(ctx, query, metaID.Int64, secretID.Int64, secretDB.Meta)
+	if err != nil {
+		return nil
+	}
 
 	query = `SELECT min(id) FROM data`
 	row = tx.QueryRowContext(ctx, query)

@@ -2,8 +2,15 @@ package app
 
 import (
 	"encoding/json"
+	"io"
+	"os"
+	"path"
 
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
+)
+
+const (
+	MaxChunkSizeBytes = 1000
 )
 
 // TODO
@@ -61,6 +68,39 @@ func (app *ClientApp) NewSecretDBFromSecret(secret *models.Secret) (*models.Secr
 func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.SecretDB) error {
 	var err error
 	switch secret.Type {
+	case models.SecretTypeFile:
+		if secret.Data.FilePath.Path == "" {
+			break
+		}
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		// read file
+		file, err := os.Open(path.Join(cwd, secret.Data.FilePath.Path))
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		chunk := make([]byte, MaxChunkSizeBytes)
+		off := 0
+		work := true
+		for work {
+			n, err := file.ReadAt(chunk, int64(off))
+			if err != nil {
+				if err == io.EOF {
+					work = false
+				} else {
+					return err
+				}
+			}
+			off += n
+			secretDB.Data = append(secretDB.Data, chunk[:n]...)
+		}
+
+	case models.SecretTypeText:
+		secretDB.Data = []byte(secret.Data.Text)
 	default:
 		secretDB.Data, err = json.Marshal(secret.Data)
 	}
@@ -68,9 +108,12 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 	if err != nil {
 		return err
 	}
-	err = app.crypt(secretDB.Data)
-	if err != nil {
-		return err
+
+	if len(secretDB.Data) != 0 {
+		err = app.crypt(secretDB.Data)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -82,6 +125,10 @@ func (app *ClientApp) transformDBToData(secret *models.Secret, secretDB *models.
 	}
 
 	switch secret.Type {
+	case models.SecretTypeFile:
+		secret.Data.FilePath.Size = uint32(len(secretDB.Data))
+	case models.SecretTypeText:
+		secret.Data.Text = string(secretDB.Data)
 	default:
 		err = json.Unmarshal(secretDB.Data, &secret.Data)
 	}

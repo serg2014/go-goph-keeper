@@ -191,9 +191,63 @@ func tuiFormAddOrEditSecret(secret *models.Secret) (*huh.Form, error) {
 			secret.Data.CreditCard = &models.CreditCard{}
 		}
 		form = tuiFormCredirCard(secret)
+	case models.SecretTypeText:
+		form = tuiFormText(secret)
+	case models.SecretTypeFile:
+		form = tuiFormFile(secret)
 	default:
 		return nil, ErrSecretType
 	}
 
 	return form, nil
+}
+
+func tuiFormText(secret *models.Secret) *huh.Form {
+	return huh.NewForm(
+		huh.NewGroup(
+			secretNameInput(&secret.Name),
+			huh.NewText().
+				Key("Text").
+				Title("Text").
+				Validate(func(data string) error {
+					if data == "" {
+						return ErrRequiredField
+					}
+					return nil
+				}).
+				Value(&secret.Data.Text),
+			tuiMeta(secret.Meta),
+			tuiComfirm(secret),
+		),
+	)
+}
+
+func tuiFormFile(secret *models.Secret) *huh.Form {
+	desc := ""
+	if secret.Data.FilePath.Size != 0 {
+		desc = fmt.Sprintf("File with size: %d in vault", secret.Data.FilePath.Size)
+	}
+	secret.Data.FilePath.Path = ""
+	return huh.NewForm(
+		huh.NewGroup(
+			secretNameInput(&secret.Name),
+			huh.NewFilePicker().
+				ShowHidden(true).
+				ShowSize(true).
+				Key("File").
+				Title("File").
+				Description(desc).
+				Value(&secret.Data.FilePath.Path),
+			tuiMeta(secret.Meta),
+			tuiComfirm(secret).
+				Validate(func(b bool) error {
+					if b {
+						if secret.ID == 0 && secret.Data.FilePath.Path == "" {
+							return fmt.Errorf("file: %w", ErrRequiredField)
+						}
+					}
+					return nil
+				}),
+		),
+	)
 }
