@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/charmbracelet/huh"
 	"github.com/serg2014/go-goph-keeper/internal/client/app"
@@ -17,17 +18,19 @@ var (
 func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 	sec := &models.Secret{}
 
+	// TODO подумать о пагинации
 	secrets, err := app.SecretsList(ctx)
 	if err != nil {
 		return err
 	}
-	// secrets := []models.Secret{
-	// 	models.Secret{ID: -1, Name: "first secret", Type: models.SecretTypeLogingPassword},
-	// 	models.Secret{ID: 2, Name: "second secret", Type: models.SecretTypeCreditCard},
-	// }
+
 	opts := make([]huh.Option[*models.Secret], 0, len(secrets))
 	for _, item := range secrets {
-		opts = append(opts, huh.NewOption(item.Name, &item))
+		b := strings.Builder{}
+		b.WriteString(item.Name)
+		b.WriteString(" ")
+		b.WriteString(item.Type.String())
+		opts = append(opts, huh.NewOption(b.String(), &item))
 	}
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -43,27 +46,36 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 		return err
 	}
 
-	secret := &models.Secret{ID: sec.ID, Type: sec.Type, Name: sec.Name, Meta: make(models.Meta)}
-
-	switch secret.Type {
-	case models.SecretTypeCreditCard:
-		// TODO
-		secret.Data.CreditCard = &models.CreditCard{}
-		form = tuiFormCredirCard(secret)
-	case models.SecretTypeLogingPassword:
-		// TODO
-		secret.Data.LoginPassword = &models.LoginPassword{}
-		form = tuiFormLoginPassword(secret)
-	default:
-		return ErrSecretType
+	// show form for edit secret
+	//secret := &models.Secret{ID: sec.ID, Type: sec.Type, Name: sec.Name, Meta: make(models.Meta)}
+	secret, err := app.GetSecret(ctx, sec.ID)
+	if err != nil {
+		return err
 	}
+
+	form, err = tuiFormAddOrEditSecret(secret)
+	if err != nil {
+		return err
+	}
+
+	// switch secret.Type {
+	// case models.SecretTypeCreditCard:
+	// 	// TODO
+	// 	secret.Data.CreditCard = &models.CreditCard{}
+	// 	form = tuiFormCredirCard(secret)
+	// case models.SecretTypeLogingPassword:
+	// 	// TODO
+	// 	secret.Data.LoginPassword = &models.LoginPassword{}
+	// 	form = tuiFormLoginPassword(secret)
+	// default:
+	// 	return ErrSecretType
+	// }
 
 	err = form.Run()
 	if err != nil {
 		return err
 	}
 	return nil
-
 }
 
 func addSecret(ctx context.Context, app *app.ClientApp) error {
@@ -92,15 +104,10 @@ func addSecret(ctx context.Context, app *app.ClientApp) error {
 		Type: secretType,
 		Meta: make(models.Meta),
 	}
-	switch secretType {
-	case models.SecretTypeLogingPassword:
-		secret.Data.LoginPassword = &models.LoginPassword{}
-		form = tuiFormLoginPassword(secret)
-	case models.SecretTypeCreditCard:
-		secret.Data.CreditCard = &models.CreditCard{}
-		form = tuiFormCredirCard(secret)
-	default:
-		return ErrSecretType
+
+	form, err = tuiFormAddOrEditSecret(secret)
+	if err != nil {
+		return err
 	}
 
 	err = form.Run()
@@ -108,9 +115,11 @@ func addSecret(ctx context.Context, app *app.ClientApp) error {
 		return err
 	}
 
-	err = app.AddSecret(ctx, secret)
-	if err != nil {
-		return err
+	if form.GetBool("save") {
+		err = app.AddSecret(ctx, secret)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -1,5 +1,7 @@
 package models
 
+import "encoding/json"
+
 type SecretDB struct {
 	ID   int
 	Type SecretType
@@ -35,6 +37,14 @@ func (s SecretType) String() string {
 }
 
 type Meta map[string]string
+
+func (m *Meta) String() (string, error) {
+	data, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
 
 const (
 	MetaKeyName = "__name__"

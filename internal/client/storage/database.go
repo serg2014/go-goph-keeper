@@ -143,3 +143,19 @@ func (s *storageDB) SecretsList(ctx context.Context) ([]models.SecretDB, error) 
 	}
 	return list, nil
 }
+
+func (s *storageDB) GetSecret(ctx context.Context, id int) (*models.SecretDB, error) {
+	// TODO не читать блоб для бинаря
+	query := `SELECT s.id, s.type, m."data" as meta, d.data
+	FROM secrets as s 
+	JOIN meta as m ON m.secret_id = s.id
+	JOIN data as d ON d.secret_id = s.id
+	WHERE s.id = ?`
+	row := s.db.QueryRowContext(ctx, query, id)
+	secretDB := &models.SecretDB{}
+	err := row.Scan(&secretDB.ID, &secretDB.Type, &secretDB.Meta, &secretDB.Data)
+	if err != nil {
+		return nil, err
+	}
+	return secretDB, nil
+}

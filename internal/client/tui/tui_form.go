@@ -23,6 +23,10 @@ var (
 )
 
 func tuiMeta(meta models.Meta) *huh.Text {
+	metaStr, err := meta.String()
+	if err != nil {
+		// TODO залогировать ошибку
+	}
 	return huh.NewText().
 		Title("Meta info").
 		Description("json dict format. Key __name__ is not allowed to be used.").
@@ -39,6 +43,7 @@ func tuiMeta(meta models.Meta) *huh.Text {
 			}
 			return nil
 		}).
+		Value(&metaStr).
 		Key("meta")
 }
 
@@ -76,7 +81,8 @@ func tuiFormCredirCard(secret *models.Secret) *huh.Form {
 					}
 					secret.Data.CreditCard.Number = data
 					return nil
-				}),
+				}).
+				Value(&secret.Data.CreditCard.Number),
 			huh.NewInput().
 				Title("Exp").
 				Description("MM/YY").
@@ -108,7 +114,8 @@ func tuiFormCredirCard(secret *models.Secret) *huh.Form {
 
 					secret.Data.CreditCard.Exp = data
 					return nil
-				}),
+				}).
+				Value(&secret.Data.CreditCard.Exp),
 			huh.NewInput().
 				Key("card_cvv").
 				Title("cvv").
@@ -126,7 +133,8 @@ func tuiFormCredirCard(secret *models.Secret) *huh.Form {
 					}
 					secret.Data.CreditCard.Cvv = data
 					return nil
-				}),
+				}).
+				Value(&secret.Data.CreditCard.Cvv),
 			tuiMeta(secret.Meta),
 			tuiComfirm(secret),
 		),
@@ -166,11 +174,25 @@ func tuiFormLoginPassword(secret *models.Secret) *huh.Form {
 func tuiComfirm(secret *models.Secret) *huh.Confirm {
 	return huh.NewConfirm().
 		Title("Save changes?").
-		Key("save").
-		Validate(func(b bool) error {
-			if b {
-				secret.Meta[models.MetaKeyName] = secret.Name
-			}
-			return nil
-		})
+		Key("save")
+}
+
+func tuiFormAddOrEditSecret(secret *models.Secret) (*huh.Form, error) {
+	var form *huh.Form
+	switch secret.Type {
+	case models.SecretTypeLogingPassword:
+		if secret.Data.LoginPassword == nil {
+			secret.Data.LoginPassword = &models.LoginPassword{}
+		}
+		form = tuiFormLoginPassword(secret)
+	case models.SecretTypeCreditCard:
+		if secret.Data.CreditCard == nil {
+			secret.Data.CreditCard = &models.CreditCard{}
+		}
+		form = tuiFormCredirCard(secret)
+	default:
+		return nil, ErrSecretType
+	}
+
+	return form, nil
 }
