@@ -6,4 +6,4 @@ CREATE TABLE IF NOT EXISTS meta (
     need_update integer(1) NOT NULL DEFAULT (0),
     data blob NOT NULL
 );
-CREATE INDEX meta_secret_id_idx ON meta (secret_id);
+CREATE UNIQUE INDEX meta_secret_id_idx ON meta (secret_id);

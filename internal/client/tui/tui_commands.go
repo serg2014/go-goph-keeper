@@ -46,34 +46,27 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 		return err
 	}
 
-	// show form for edit secret
-	//secret := &models.Secret{ID: sec.ID, Type: sec.Type, Name: sec.Name, Meta: make(models.Meta)}
 	secret, err := app.GetSecret(ctx, sec.ID)
 	if err != nil {
 		return err
 	}
 
+	// show form for edit secret
 	form, err = tuiFormAddOrEditSecret(secret)
 	if err != nil {
 		return err
 	}
 
-	// switch secret.Type {
-	// case models.SecretTypeCreditCard:
-	// 	// TODO
-	// 	secret.Data.CreditCard = &models.CreditCard{}
-	// 	form = tuiFormCredirCard(secret)
-	// case models.SecretTypeLogingPassword:
-	// 	// TODO
-	// 	secret.Data.LoginPassword = &models.LoginPassword{}
-	// 	form = tuiFormLoginPassword(secret)
-	// default:
-	// 	return ErrSecretType
-	// }
-
 	err = form.Run()
 	if err != nil {
 		return err
+	}
+
+	if form.GetBool("save") {
+		err = app.UpdateSecret(ctx, secret)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

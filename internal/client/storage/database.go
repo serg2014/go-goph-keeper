@@ -56,7 +56,35 @@ func (s *storageDB) Close() error {
 	return s.db.Close()
 }
 
-func (s *storageDB) AddSecret(ctx context.Context, data *models.SecretDB) error {
+func (s *storageDB) UpdateSecret(ctx context.Context, secretDB *models.SecretDB) error {
+	// начинаем транзакцию
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `UPDATE meta SET data=?, updated_at=strftime('%s', 'now'), need_update=?
+	WHERE secret_id=?`
+	need_update := 0
+	if secretDB.ID > 0 {
+		need_update = 1
+	}
+	_, err = s.db.ExecContext(ctx, query, secretDB.Meta, need_update, secretDB.ID)
+	if err != nil {
+		return err
+	}
+
+	query = `UPDATE data SET data=?, updated_at=strftime('%s', 'now'), need_update=?
+	WHERE secret_id=?`
+	_, err = s.db.ExecContext(ctx, query, secretDB.Data, need_update, secretDB.ID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+func (s *storageDB) AddSecret(ctx context.Context, secretDB *models.SecretDB) error {
 	// начинаем транзакцию
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -77,7 +105,7 @@ func (s *storageDB) AddSecret(ctx context.Context, data *models.SecretDB) error 
 	}
 	secretID.Int64--
 	query = `INSERT INTO secrets (id, type) VALUES(?, ?)`
-	_, err = tx.ExecContext(ctx, query, secretID.Int64, data.Type)
+	_, err = tx.ExecContext(ctx, query, secretID.Int64, secretDB.Type)
 	if err != nil {
 		return err
 	}
@@ -96,7 +124,7 @@ func (s *storageDB) AddSecret(ctx context.Context, data *models.SecretDB) error 
 	metaID.Int64--
 
 	query = `INSERT INTO meta (id, secret_id, data) VALUES(?,?,?)`
-	_, err = tx.ExecContext(ctx, query, metaID.Int64, secretID.Int64, data.Meta)
+	_, err = tx.ExecContext(ctx, query, metaID.Int64, secretID.Int64, secretDB.Meta)
 
 	query = `SELECT min(id) FROM data`
 	row = tx.QueryRowContext(ctx, query)
@@ -112,7 +140,10 @@ func (s *storageDB) AddSecret(ctx context.Context, data *models.SecretDB) error 
 	dataID.Int64--
 
 	query = `INSERT INTO data (id, secret_id, data) VALUES(?,?,?)`
-	_, err = tx.ExecContext(ctx, query, dataID.Int64, secretID.Int64, data.Data)
+	_, err = tx.ExecContext(ctx, query, dataID.Int64, secretID.Int64, secretDB.Data)
+	if err != nil {
+		return err
+	}
 
 	return tx.Commit()
 }

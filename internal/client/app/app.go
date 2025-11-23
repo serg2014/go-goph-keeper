@@ -28,6 +28,18 @@ func (app *ClientApp) AddSecret(ctx context.Context, secret *models.Secret) erro
 	return nil
 }
 
+func (app *ClientApp) UpdateSecret(ctx context.Context, secret *models.Secret) error {
+	secretDB, err := app.NewSecretDBFromSecret(secret)
+	if err != nil {
+		return err
+	}
+	err = app.store.UpdateSecret(ctx, secretDB)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (app *ClientApp) SecretsList(ctx context.Context) ([]models.Secret, error) {
 	list, err := app.store.SecretsList(ctx)
 	if err != nil {
