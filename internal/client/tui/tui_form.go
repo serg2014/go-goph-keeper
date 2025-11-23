@@ -23,7 +23,7 @@ var (
 )
 
 func tuiMeta(meta models.Meta) *huh.Text {
-	metaStr, err := meta.String()
+	metaStr, err := meta.PrettyString()
 	if err != nil {
 		// TODO залогировать ошибку
 	}
@@ -31,6 +31,7 @@ func tuiMeta(meta models.Meta) *huh.Text {
 		Title("Meta info").
 		Description("json dict format. Key __name__ is not allowed to be used.").
 		Validate(func(data string) error {
+			clear(meta)
 			if data == "" {
 				return nil
 			}

@@ -38,8 +38,8 @@ func (s SecretType) String() string {
 
 type Meta map[string]string
 
-func (m *Meta) String() (string, error) {
-	data, err := json.Marshal(m)
+func (m *Meta) PrettyString() (string, error) {
+	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return "", err
 	}
