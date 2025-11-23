@@ -60,6 +60,10 @@ func NewStorageDB(ctx context.Context, dsn string) (storage.Storager, error) {
 	return &storageDB{db: db}, nil
 }
 
+func (s *storageDB) Close() error {
+	return s.db.Close()
+}
+
 func (s *storageDB) CreateUser(ctx context.Context, login, passwordHash string) (*models.UserID, error) {
 	// начать транзакцию
 	tx, err := s.db.BeginTx(ctx, nil)

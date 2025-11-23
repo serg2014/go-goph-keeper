@@ -68,6 +68,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	defer storage.Close()
 	app := app.NewApp(storage)
 
 	grpcPanicRecoveryHandler := func(p any) (err error) {

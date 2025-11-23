@@ -14,6 +14,7 @@ var (
 
 // Storager interface
 type Storager interface {
+	Close() error
 	CreateUser(ctx context.Context, login, passwordHash string) (*models.UserID, error)
 	GetUser(ctx context.Context, login, passwordHash string) (*models.UserID, error)
 }
