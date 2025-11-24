@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path"
 	"strconv"
@@ -176,4 +177,38 @@ func (app *ClientApp) GetAuthToken() string {
 
 func (app *ClientApp) GetRefreshToken() string {
 	return app.tokens.refresh
+}
+
+type SyncStatus struct {
+	Remote     Status
+	Local      Status
+	Conflicted []Conflicted
+}
+
+type Status struct {
+	Added   int
+	Updated int
+	Deleted int
+}
+
+type Conflicted struct {
+	Meta ConflictedID
+	Data ConflictedID
+}
+
+type ConflictedID struct {
+	LocalID  int
+	RemoteID int
+}
+
+func (app *ClientApp) Sync() (*SyncStatus, error) {
+	/*
+		1. Удаляем секреты на сервере по записям из таблицы deleted
+		2. Создаем секреты на сервере (все записи с отрицательными ключами)
+		3. Обновляем секреты на сервере
+		4. Обновляем секреты локально
+		5. Удаляем секреты локально
+		6. Создаем секреты локально
+	*/
+	return nil, errors.New("not implemented")
 }
