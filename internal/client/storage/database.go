@@ -225,7 +225,11 @@ func (s *storageDB) DeleteSecret(ctx context.Context, id int) error {
 		return err
 	}
 	if id > 0 {
-		// TODO сделать запись в табличку для удаления, чтобы удалить с сервера
+		query = "INSERT INTO deleted (secret_id) VALUES(?)"
+		_, err = tx.ExecContext(ctx, query, id)
+		if err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()
