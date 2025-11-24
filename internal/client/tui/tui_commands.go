@@ -123,3 +123,33 @@ func addSecret(ctx context.Context, app *app.ClientApp) error {
 	}
 	return nil
 }
+
+func showSyncMenu(ctx context.Context, app *app.ClientApp) error {
+	opts := make([]huh.Option[SyncMenuType], 0, SyncMenuTypeMax)
+	for i := SyncMenuType(0); i < SyncMenuTypeMax; i++ {
+		str := i.String()
+		if str != "" {
+			opts = append(opts, huh.NewOption(str, i))
+		}
+	}
+	var selectedMenu SyncMenuType
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[SyncMenuType]().
+				Title("Sync").
+				Options(opts...).
+				Value(&selectedMenu),
+		),
+	)
+	err := form.Run()
+	if err != nil {
+		return err
+	}
+
+	err = tuiSyncForm(ctx, app, selectedMenu)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

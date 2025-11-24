@@ -20,6 +20,7 @@ type CommandType int
 const (
 	CommandTypeList CommandType = iota
 	CommandTypeAddSecret
+	CommandTypeSync
 	CommandTypeQuit
 	CommandTypeMax // Must be last
 )
@@ -30,6 +31,8 @@ func (c CommandType) String() string {
 		return "list secrets"
 	case CommandTypeAddSecret:
 		return "add new secret"
+	case CommandTypeSync:
+		return "sync"
 	case CommandTypeQuit:
 		return "quit"
 	default:
@@ -40,6 +43,7 @@ func (c CommandType) String() string {
 var cmds = map[CommandType]func(ctx context.Context, app *app.ClientApp) error{
 	CommandTypeList:      showSecretsList,
 	CommandTypeAddSecret: addSecret,
+	CommandTypeSync:      showSyncMenu,
 	CommandTypeQuit: func(context.Context, *app.ClientApp) error {
 		fmt.Println(
 			lipgloss.NewStyle().
@@ -80,10 +84,10 @@ func run_command(ctx context.Context, app *app.ClientApp, command CommandType) e
 
 func intro() (*CommandType, error) {
 	opts := make([]huh.Option[CommandType], 0, CommandTypeMax)
-	for i := 0; i < int(CommandTypeMax); i++ {
-		str := CommandType(i).String()
+	for i := CommandType(0); i < CommandTypeMax; i++ {
+		str := i.String()
 		if str != "" {
-			opts = append(opts, huh.NewOption(str, CommandType(i)))
+			opts = append(opts, huh.NewOption(str, i))
 		}
 	}
 	var cmd CommandType

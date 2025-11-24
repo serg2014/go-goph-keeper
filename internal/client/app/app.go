@@ -6,18 +6,35 @@ import (
 	"path"
 	"strconv"
 
+	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/client/config"
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
 	"github.com/serg2014/go-goph-keeper/internal/client/storage"
 )
 
 type ClientApp struct {
-	store  storage.Storager
-	config *config.Config
+	store    storage.Storager
+	config   *config.Config
+	grpcAuth pb.AuthServiceClient
+	grpcKeep pb.GophKeeperServiceClient
+	tokens   tokens
+}
+
+type tokens struct {
+	auth    string
+	refresh string
 }
 
 func NewApp(store storage.Storager, config *config.Config) *ClientApp {
 	return &ClientApp{store: store, config: config}
+}
+
+func (app *ClientApp) SetAuthClient(authClient pb.AuthServiceClient) {
+	app.grpcAuth = authClient
+}
+
+func (app *ClientApp) SetKeeperClient(keeperClient pb.GophKeeperServiceClient) {
+	app.grpcKeep = keeperClient
 }
 
 func (app *ClientApp) AddSecret(ctx context.Context, secret *models.Secret) error {
@@ -105,4 +122,58 @@ func (app *ClientApp) DeleteSecret(ctx context.Context, id int) error {
 		return err
 	}
 	return nil
+}
+
+func (app *ClientApp) saveTokens(auth, refresh string) {
+	app.tokens = tokens{
+		auth:    auth,
+		refresh: refresh,
+	}
+}
+func (app *ClientApp) RegisterUser(ctx context.Context, login, password string) error {
+	resp, err := app.grpcAuth.RegisterUser(ctx, &pb.RegisterUserRequest{
+		Login:    login,
+		Password: password,
+	})
+	if err != nil {
+		return err
+	}
+
+	app.saveTokens(resp.Access.Token, resp.Refresh.Token)
+	return nil
+}
+
+func (app *ClientApp) AuthUser(ctx context.Context, login, password string) error {
+	resp, err := app.grpcAuth.AuthUser(ctx, &pb.AuthUserRequest{
+		Login:    login,
+		Password: password,
+	})
+	if err != nil {
+		return err
+	}
+
+	app.saveTokens(resp.Access.Token, resp.Refresh.Token)
+	return nil
+}
+
+func (app *ClientApp) RenewAuth(ctx context.Context) error {
+	resp, err := app.grpcAuth.RenewAuth(ctx, &pb.RenewAuthRequest{})
+	if err != nil {
+		return err
+	}
+	app.saveTokens(resp.Access.Token, resp.Refresh.Token)
+	return nil
+}
+
+func (app *ClientApp) Ping(ctx context.Context) error {
+	_, err := app.grpcKeep.Ping(ctx, &pb.PingRequest{})
+	return err
+}
+
+func (app *ClientApp) GetAuthToken() string {
+	return app.tokens.auth
+}
+
+func (app *ClientApp) GetRefreshToken() string {
+	return app.tokens.refresh
 }
