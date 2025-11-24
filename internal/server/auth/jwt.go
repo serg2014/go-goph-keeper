@@ -66,14 +66,18 @@ func GetUserIDFromToken(tokenString string) (*models.UserID, bool, error) {
 			return []byte(secretForToken), nil
 		})
 
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, claims.IsRefresh, ErrTokenExpired
+		}
+
+		return nil, claims.IsRefresh, err
+	}
+
 	if token.Valid {
 		// возвращаем ID пользователя в читаемом виде
 		return claims.UserID, claims.IsRefresh, nil
 	}
 
-	if errors.Is(err, jwt.ErrTokenExpired) {
-		return nil, claims.IsRefresh, ErrTokenExpired
-	}
-
-	return nil, claims.IsRefresh, err
+	return nil, claims.IsRefresh, ErrTokenNotValid
 }

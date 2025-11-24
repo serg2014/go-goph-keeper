@@ -25,6 +25,7 @@ var (
 	ErrTokenExpired          = errors.New("jwt token is expired")
 	ErrTokenBadSigningMethod = errors.New("unexpected signing method")
 	ErrTokenRequired         = errors.New("auth token required")
+	ErrTokenNotValid         = errors.New("not valid token")
 
 	// ErrUserIDFromContext error when no userid in context
 	ErrUserIDFromContext = fmt.Errorf("no userid in context")
