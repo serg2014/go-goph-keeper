@@ -61,7 +61,7 @@ func secretNameInput(name *string) *huh.Input {
 		Value(name)
 }
 
-func tuiFormCredirCard(secret *models.Secret) *huh.Form {
+func tuiFormCredirCard(secret *models.Secret, save *bool) *huh.Form {
 	return huh.NewForm(
 		huh.NewGroup(
 			secretNameInput(&secret.Name),
@@ -137,12 +137,13 @@ func tuiFormCredirCard(secret *models.Secret) *huh.Form {
 				}).
 				Value(&secret.Data.CreditCard.Cvv),
 			tuiMeta(secret.Meta),
-			tuiComfirm(secret),
+			tuiComfirm(secret, save),
 		),
+		tuiConfirmDelete(secret, save),
 	)
 }
 
-func tuiFormLoginPassword(secret *models.Secret) *huh.Form {
+func tuiFormLoginPassword(secret *models.Secret, save *bool) *huh.Form {
 	return huh.NewForm(
 		huh.NewGroup(
 			secretNameInput(&secret.Name),
@@ -167,34 +168,36 @@ func tuiFormLoginPassword(secret *models.Secret) *huh.Form {
 				}).
 				Value(&secret.Data.LoginPassword.Password),
 			tuiMeta(secret.Meta),
-			tuiComfirm(secret),
+			tuiComfirm(secret, save),
 		),
+		tuiConfirmDelete(secret, save),
 	)
 }
 
-func tuiComfirm(secret *models.Secret) *huh.Confirm {
+func tuiComfirm(secret *models.Secret, save *bool) *huh.Confirm {
 	return huh.NewConfirm().
 		Title("Save changes?").
-		Key("save")
+		Key("save").
+		Value(save)
 }
 
-func tuiFormAddOrEditSecret(secret *models.Secret, fn func(*models.Secret) (string, error)) (*huh.Form, error) {
+func tuiFormAddOrEditSecret(secret *models.Secret, save *bool, fn func(*models.Secret) (string, error)) (*huh.Form, error) {
 	var form *huh.Form
 	switch secret.Type {
 	case models.SecretTypeLogingPassword:
 		if secret.Data.LoginPassword == nil {
 			secret.Data.LoginPassword = &models.LoginPassword{}
 		}
-		form = tuiFormLoginPassword(secret)
+		form = tuiFormLoginPassword(secret, save)
 	case models.SecretTypeCreditCard:
 		if secret.Data.CreditCard == nil {
 			secret.Data.CreditCard = &models.CreditCard{}
 		}
-		form = tuiFormCredirCard(secret)
+		form = tuiFormCredirCard(secret, save)
 	case models.SecretTypeText:
-		form = tuiFormText(secret)
+		form = tuiFormText(secret, save)
 	case models.SecretTypeFile:
-		form = tuiFormFile(secret, fn)
+		form = tuiFormFile(secret, save, fn)
 	default:
 		return nil, ErrSecretType
 	}
@@ -202,7 +205,7 @@ func tuiFormAddOrEditSecret(secret *models.Secret, fn func(*models.Secret) (stri
 	return form, nil
 }
 
-func tuiFormText(secret *models.Secret) *huh.Form {
+func tuiFormText(secret *models.Secret, save *bool) *huh.Form {
 	return huh.NewForm(
 		huh.NewGroup(
 			secretNameInput(&secret.Name),
@@ -217,12 +220,13 @@ func tuiFormText(secret *models.Secret) *huh.Form {
 				}).
 				Value(&secret.Data.Text),
 			tuiMeta(secret.Meta),
-			tuiComfirm(secret),
+			tuiComfirm(secret, save),
 		),
+		tuiConfirmDelete(secret, save),
 	)
 }
 
-func tuiFormFile(secret *models.Secret, fn func(*models.Secret) (string, error)) *huh.Form {
+func tuiFormFile(secret *models.Secret, save *bool, fn func(*models.Secret) (string, error)) *huh.Form {
 	secret.Data.File.Path = ""
 	opts := []huh.Field{
 		secretNameInput(&secret.Name),
@@ -257,7 +261,7 @@ func tuiFormFile(secret *models.Secret, fn func(*models.Secret) (string, error))
 
 	opts = append(opts,
 		tuiMeta(secret.Meta),
-		tuiComfirm(secret).
+		tuiComfirm(secret, save).
 			Validate(func(b bool) error {
 				if b {
 					if secret.ID == 0 && secret.Data.File.Path == "" {
@@ -269,5 +273,16 @@ func tuiFormFile(secret *models.Secret, fn func(*models.Secret) (string, error))
 	)
 	return huh.NewForm(
 		huh.NewGroup(opts...),
+		tuiConfirmDelete(secret, save),
 	)
+}
+
+func tuiConfirmDelete(secret *models.Secret, save *bool) *huh.Group {
+	return huh.NewGroup(
+		huh.NewConfirm().
+			Title("Delete secret?").
+			Key("delete")).
+		WithHideFunc(func() bool {
+			return secret.ID == 0 || *save
+		})
 }

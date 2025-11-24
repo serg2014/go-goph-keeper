@@ -98,3 +98,11 @@ func (app *ClientApp) SaveSecterToFile(secret *models.Secret) (string, error) {
 	}
 	return path, nil
 }
+
+func (app *ClientApp) DeleteSecret(ctx context.Context, id int) error {
+	err := app.store.DeleteSecret(ctx, id)
+	if err != nil {
+		return err
+	}
+	return nil
+}

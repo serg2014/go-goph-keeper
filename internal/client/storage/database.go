@@ -198,3 +198,35 @@ func (s *storageDB) GetSecret(ctx context.Context, id int) (*models.SecretDB, er
 	}
 	return secretDB, nil
 }
+
+func (s *storageDB) DeleteSecret(ctx context.Context, id int) error {
+	// начинаем транзакцию
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `DELETE FROM secrets WHERE id=?`
+	_, err = tx.ExecContext(ctx, query, id)
+	if err != nil {
+		return err
+	}
+
+	query = `DELETE FROM meta WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, id)
+	if err != nil {
+		return err
+	}
+
+	query = `DELETE FROM data WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if id > 0 {
+		// TODO сделать запись в табличку для удаления, чтобы удалить с сервера
+	}
+
+	return tx.Commit()
+}

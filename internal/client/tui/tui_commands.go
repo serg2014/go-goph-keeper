@@ -52,7 +52,8 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 	}
 
 	// show form for edit secret
-	form, err = tuiFormAddOrEditSecret(secret, app.SaveSecterToFile)
+	save := false
+	form, err = tuiFormAddOrEditSecret(secret, &save, app.SaveSecterToFile)
 	if err != nil {
 		return err
 	}
@@ -62,8 +63,13 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 		return err
 	}
 
-	if form.GetBool("save") {
+	if save {
 		err = app.UpdateSecret(ctx, secret)
+		if err != nil {
+			return err
+		}
+	} else if form.GetBool("delete") {
+		err = app.DeleteSecret(ctx, secret.ID)
 		if err != nil {
 			return err
 		}
@@ -98,7 +104,8 @@ func addSecret(ctx context.Context, app *app.ClientApp) error {
 		Meta: make(models.Meta),
 	}
 
-	form, err = tuiFormAddOrEditSecret(secret, app.SaveSecterToFile)
+	save := false
+	form, err = tuiFormAddOrEditSecret(secret, &save, app.SaveSecterToFile)
 	if err != nil {
 		return err
 	}
@@ -108,7 +115,7 @@ func addSecret(ctx context.Context, app *app.ClientApp) error {
 		return err
 	}
 
-	if form.GetBool("save") {
+	if save {
 		err = app.AddSecret(ctx, secret)
 		if err != nil {
 			return err
