@@ -163,6 +163,7 @@ func run() error {
 	// run grpc server
 	grp.Go(func() error {
 		logger.Logger.Info("Try running grpc server")
+		// TODO config
 		listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", "localhost", 3030))
 		if err != nil {
 			return err

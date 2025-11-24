@@ -50,6 +50,9 @@ func buildJWT(userID *models.UserID, expire time.Duration, refresh bool) (string
 }
 
 func GetUserIDFromToken(tokenString string) (*models.UserID, bool, error) {
+	if tokenString == "" {
+		return nil, false, ErrTokenRequired
+	}
 	// создаём экземпляр структуры с утверждениями
 	claims := &Claims{}
 	// парсим из строки токена tokenString в структуру claims

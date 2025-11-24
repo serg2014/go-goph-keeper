@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	accessTokenExpire  = 15 * time.Minute
+	accessTokenExpire  = 1 * time.Minute
 	refreshTokenExpire = 1 * time.Hour
 	// TODO from env
 	secretForToken = "secretfortoken"
@@ -24,6 +24,7 @@ const (
 var (
 	ErrTokenExpired          = errors.New("jwt token is expired")
 	ErrTokenBadSigningMethod = errors.New("unexpected signing method")
+	ErrTokenRequired         = errors.New("auth token required")
 
 	// ErrUserIDFromContext error when no userid in context
 	ErrUserIDFromContext = fmt.Errorf("no userid in context")
