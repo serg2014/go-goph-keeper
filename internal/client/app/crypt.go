@@ -69,7 +69,7 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 	var err error
 	switch secret.Type {
 	case models.SecretTypeFile:
-		if secret.Data.FilePath.Path == "" {
+		if secret.Data.File.Path == "" {
 			break
 		}
 		cwd, err := os.Getwd()
@@ -77,7 +77,7 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 			return err
 		}
 		// read file
-		file, err := os.Open(path.Join(cwd, secret.Data.FilePath.Path))
+		file, err := os.Open(path.Join(cwd, secret.Data.File.Path))
 		if err != nil {
 			return err
 		}
@@ -126,7 +126,7 @@ func (app *ClientApp) transformDBToData(secret *models.Secret, secretDB *models.
 
 	switch secret.Type {
 	case models.SecretTypeFile:
-		secret.Data.FilePath.Size = uint32(len(secretDB.Data))
+		secret.Data.File.Data = secretDB.Data
 	case models.SecretTypeText:
 		secret.Data.Text = string(secretDB.Data)
 	default:

@@ -60,7 +60,7 @@ type Data struct {
 	LoginPassword *LoginPassword `json:"login_password,omitempty"`
 	CreditCard    *CreditCard    `json:"credit_card,omitempty"`
 	Text          string         `json:"-"`
-	FilePath      FilePath       `json:"-"`
+	File          FileData       `json:"-"`
 }
 
 type LoginPassword struct {
@@ -74,7 +74,7 @@ type CreditCard struct {
 	Cvv    string `json:"cvv,omitempty"`
 }
 
-type FilePath struct {
+type FileData struct {
 	Path string
-	Size uint32
+	Data []byte
 }

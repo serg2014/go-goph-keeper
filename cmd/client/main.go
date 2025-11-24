@@ -28,7 +28,7 @@ func run() error {
 		return err
 	}
 
-	app := app.NewApp(store)
+	app := app.NewApp(store, conf)
 
 	err = tui.Tui(ctx, app)
 	if err != nil {

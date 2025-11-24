@@ -178,7 +178,7 @@ func tuiComfirm(secret *models.Secret) *huh.Confirm {
 		Key("save")
 }
 
-func tuiFormAddOrEditSecret(secret *models.Secret) (*huh.Form, error) {
+func tuiFormAddOrEditSecret(secret *models.Secret, fn func(*models.Secret) (string, error)) (*huh.Form, error) {
 	var form *huh.Form
 	switch secret.Type {
 	case models.SecretTypeLogingPassword:
@@ -194,7 +194,7 @@ func tuiFormAddOrEditSecret(secret *models.Secret) (*huh.Form, error) {
 	case models.SecretTypeText:
 		form = tuiFormText(secret)
 	case models.SecretTypeFile:
-		form = tuiFormFile(secret)
+		form = tuiFormFile(secret, fn)
 	default:
 		return nil, ErrSecretType
 	}
@@ -222,32 +222,52 @@ func tuiFormText(secret *models.Secret) *huh.Form {
 	)
 }
 
-func tuiFormFile(secret *models.Secret) *huh.Form {
-	desc := ""
-	if secret.Data.FilePath.Size != 0 {
-		desc = fmt.Sprintf("File with size: %d in vault", secret.Data.FilePath.Size)
+func tuiFormFile(secret *models.Secret, fn func(*models.Secret) (string, error)) *huh.Form {
+	secret.Data.File.Path = ""
+	opts := []huh.Field{
+		secretNameInput(&secret.Name),
+		huh.NewFilePicker().
+			ShowHidden(true). // do not work
+			ShowSize(true).
+			Key("File").
+			Title("File").
+			Value(&secret.Data.File.Path),
 	}
-	secret.Data.FilePath.Path = ""
-	return huh.NewForm(
-		huh.NewGroup(
-			secretNameInput(&secret.Name),
-			huh.NewFilePicker().
-				ShowHidden(true).
-				ShowSize(true).
-				Key("File").
-				Title("File").
-				Description(desc).
-				Value(&secret.Data.FilePath.Path),
-			tuiMeta(secret.Meta),
-			tuiComfirm(secret).
+	if len(secret.Data.File.Data) != 0 {
+		desc := fmt.Sprintf("File with size: %d in vault", len(secret.Data.File.Data))
+		opts = append(opts,
+			huh.NewConfirm().
+				DescriptionFunc(func() string {
+					return desc
+				}, &desc).
+				Title("Show file?").
+				Key("download_file").
 				Validate(func(b bool) error {
 					if b {
-						if secret.ID == 0 && secret.Data.FilePath.Path == "" {
-							return fmt.Errorf("file: %w", ErrRequiredField)
+						path, err := fn(secret)
+						if err != nil {
+							return err
 						}
+						desc += fmt.Sprintf("\nFile in %s\n", path)
 					}
 					return nil
 				}),
-		),
+		)
+	}
+
+	opts = append(opts,
+		tuiMeta(secret.Meta),
+		tuiComfirm(secret).
+			Validate(func(b bool) error {
+				if b {
+					if secret.ID == 0 && secret.Data.File.Path == "" {
+						return fmt.Errorf("file: %w", ErrRequiredField)
+					}
+				}
+				return nil
+			}),
+	)
+	return huh.NewForm(
+		huh.NewGroup(opts...),
 	)
 }
