@@ -207,6 +207,26 @@ func (s *storageDB) DeleteSecret(ctx context.Context, id int) error {
 	}
 	defer tx.Rollback()
 
+	if id > 0 {
+		query := `INSERT INTO deleted (secret_id, id, type, version) 
+		SELECT id, 0, version 
+		FROM meta 
+		WHERE secret_id=?`
+		_, err = tx.ExecContext(ctx, query, id, id)
+		if err != nil {
+			return err
+		}
+
+		query = `INSERT INTO deleted (secret_id, id, type, version) 
+		SELECT id, 1, version 
+		FROM data 
+		WHERE secret_id=?`
+		_, err = tx.ExecContext(ctx, query, id, id)
+		if err != nil {
+			return err
+		}
+	}
+
 	query := `DELETE FROM secrets WHERE id=?`
 	_, err = tx.ExecContext(ctx, query, id)
 	if err != nil {
@@ -223,13 +243,6 @@ func (s *storageDB) DeleteSecret(ctx context.Context, id int) error {
 	_, err = tx.ExecContext(ctx, query, id)
 	if err != nil {
 		return err
-	}
-	if id > 0 {
-		query = "INSERT INTO deleted (secret_id) VALUES(?)"
-		_, err = tx.ExecContext(ctx, query, id)
-		if err != nil {
-			return err
-		}
 	}
 
 	return tx.Commit()

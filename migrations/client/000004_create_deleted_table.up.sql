@@ -1,4 +1,6 @@
 CREATE TABLE IF NOT EXISTS deleted (
-    secret_id integer NOT NULL PRIMARY KEY,
-    locked_at integer
+    secret_id integer NOT NULL,
+    id integer NOT NULL,
+    type integer(1) NOT NULL,
+    version integer NOT NULL
 );
