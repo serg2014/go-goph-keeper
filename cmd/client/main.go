@@ -77,7 +77,6 @@ func run() error {
 		log.Fatal(err)
 	}
 
-	// TODO config
 	conn, err := grpc.NewClient(
 		conf.ServerAddress.String(),
 		grpc.WithTransportCredentials(

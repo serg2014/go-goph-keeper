@@ -13,3 +13,9 @@ cmd/server/server
 # autogenereted proto
 cmd/server/proto/keeper.pb.go
 cmd/server/proto/keeper_grpc.pb.go
+
+# logs, db, ...
+goph-keeper-client-data/*
+
+server.crt
+server.key
