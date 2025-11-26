@@ -9,7 +9,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
-	"fmt"
 	"log/slog"
 	"math/big"
 	"net"
@@ -35,6 +34,7 @@ import (
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/server/app"
 	"github.com/serg2014/go-goph-keeper/internal/server/auth"
+	"github.com/serg2014/go-goph-keeper/internal/server/config"
 	"github.com/serg2014/go-goph-keeper/internal/server/logger"
 	"github.com/serg2014/go-goph-keeper/internal/server/storage/database"
 )
@@ -59,12 +59,16 @@ func interceptorLogger(l *slog.Logger) logging.Logger {
 }
 
 func run() error {
+	conf, err := config.NewConfig()
+	if err != nil {
+		return err
+	}
+
 	// Setup logging.
 	logger.Init()
 
 	ctx := context.Background()
-	// TODO conf
-	storage, err := database.NewStorageDB(ctx, "database=postgres sslmode=disable")
+	storage, err := database.NewStorageDB(ctx, conf.DatabaseDSN)
 	if err != nil {
 		return err
 	}
@@ -102,7 +106,7 @@ func run() error {
 		return auth.WithUser(ctx, userID), nil
 	}
 	// Setup auth matcher.
-	allButHealthZ := func(ctx context.Context, callMeta interceptors.CallMeta) bool {
+	authMatcherKeeper := func(ctx context.Context, callMeta interceptors.CallMeta) bool {
 		// logger.Logger.Info(
 		// 	callMeta.Service,
 		// 	slog.String("method", callMeta.Method),
@@ -112,7 +116,6 @@ func run() error {
 		// )
 
 		return pb.GophKeeperService_ServiceDesc.ServiceName == callMeta.Service
-		//return pb.GophKeeperService_Ping_FullMethodName == callMeta.FullMethod()
 	}
 
 	// Setup custom auth.
@@ -143,7 +146,7 @@ func run() error {
 		// Chain interceptors
 		grpc.ChainUnaryInterceptor(
 			logging.UnaryServerInterceptor(interceptorLogger(logger.RPCLogger)),
-			selector.UnaryServerInterceptor(authinterceptors.UnaryServerInterceptor(authFn), selector.MatchFunc(allButHealthZ)),
+			selector.UnaryServerInterceptor(authinterceptors.UnaryServerInterceptor(authFn), selector.MatchFunc(authMatcherKeeper)),
 			selector.UnaryServerInterceptor(authinterceptors.UnaryServerInterceptor(authRefreshFn), selector.MatchFunc(refreshMatcher)),
 			recovery.UnaryServerInterceptor(recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
@@ -163,8 +166,7 @@ func run() error {
 	// run grpc server
 	grp.Go(func() error {
 		logger.Logger.Info("Try running grpc server")
-		// TODO config
-		listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", "localhost", 3030))
+		listen, err := net.Listen("tcp", conf.ServerAddress.String())
 		if err != nil {
 			return err
 		}
