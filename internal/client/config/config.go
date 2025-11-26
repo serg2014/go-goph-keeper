@@ -2,25 +2,21 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"io/fs"
+	"net"
 	"os"
 	"path"
+	"strconv"
 
 	"github.com/caarlos0/env/v11"
 )
 
 const (
 	DefaultDirName = "goph-keeper-client-data"
+	DefaultLogsDir = "logs"
 	TmpDirName     = "tmp"
 	DbName         = "keeper.db"
-)
-
-var (
-	ErrTmpDir = errors.New("can not create tmp dir")
-	ErrWrkDir = errors.New("can not create working dir")
 )
 
 type Config struct {
@@ -29,6 +25,52 @@ type Config struct {
 	LogLevel   string `env:"LOG_LEVEL" json:"log_level"`
 	// ConfigPath path to the config file json
 	ConfigPath string `env:"CONFIG,unset" json:"-"`
+	// ServerAddress remote server to sync data
+	ServerAddress ServerAddress `env:"SERVER_ADDRESS" json:"server_address"`
+	// LogDir path to logs
+	LogDir string `env:"LOG_DIR" json:"log_dir"`
+}
+
+type ServerAddress struct {
+	// Host is hostname where app will work
+	Host string
+	// Port is the number of port where app will work
+	Port uint64
+}
+
+// String implemetation of flags.Valur interface
+func (s *ServerAddress) String() string {
+	return fmt.Sprintf("%s:%d", s.Host, s.Port)
+}
+
+// Set implemetation of flags.Valur interface
+func (s *ServerAddress) Set(flagValue string) error {
+	host, portStr, err := net.SplitHostPort(flagValue)
+	if err != nil {
+		return err
+	}
+
+	port, err := strconv.ParseUint(portStr, 10, 32)
+	if err != nil {
+		return err
+	}
+	s.Host = host
+	s.Port = port
+	return nil
+}
+
+// UnmarshalJSON for parse ServerAddress from json config
+func (s *ServerAddress) UnmarshalJSON(data []byte) error {
+	var str string
+	err := json.Unmarshal(data, &str)
+	if err != nil {
+		return err
+	}
+	err = s.Set(str)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // newConfig create a new *config
@@ -57,13 +99,25 @@ func (c *Config) setDefaults() error {
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
+	if c.LogDir == "" {
+		c.LogDir = path.Join(c.WorkingDir, DefaultLogsDir)
+	}
+
+	if c.ServerAddress.Host == "" {
+		c.ServerAddress.Host = "127.0.0.1"
+	}
+	if c.ServerAddress.Port == 0 {
+		c.ServerAddress.Port = 3030
+	}
 	return nil
 }
 
 func (c *Config) Init() error {
 	flag.StringVar(&c.WorkingDir, "w", c.WorkingDir, "working directory")
 	flag.StringVar(&c.LogLevel, "l", c.LogLevel, "log level")
-	flag.StringVar(&c.ConfigPath, "config", "", "path to config")
+	flag.StringVar(&c.ConfigPath, "config", "", "path to config(format json)")
+	flag.Var(&c.ServerAddress, "a", "remote server address")
+	flag.StringVar(&c.LogDir, "ld", c.LogDir, "path to logs")
 	flag.Parse()
 
 	err := env.Parse(c)
@@ -77,11 +131,6 @@ func (c *Config) Init() error {
 			return err
 		}
 		*c = *newconfig
-	}
-
-	err = c.createDirs()
-	if err != nil {
-		return err
 	}
 
 	return nil
@@ -136,29 +185,4 @@ func (c *Config) TmpDirPath() string {
 
 func (c *Config) DbPath() string {
 	return path.Join(c.WorkingDir, DbName)
-}
-
-func (c *Config) Clean() error {
-	return os.RemoveAll(c.TmpDirPath())
-}
-
-func (c *Config) createDirs() error {
-	_, err := os.Stat(c.WorkingDir)
-	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		err = os.Mkdir(c.WorkingDir, 0700)
-		if err != nil {
-			return fmt.Errorf("%w: %w", ErrWrkDir, err)
-		}
-	}
-
-	c.Clean()
-	err = os.Mkdir(c.TmpDirPath(), 0700)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrTmpDir, err)
-	}
-
-	return nil
 }
