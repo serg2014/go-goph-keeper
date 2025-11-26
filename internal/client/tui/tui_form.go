@@ -4,11 +4,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"github.com/serg2014/go-goph-keeper/internal/client/logger"
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
+)
+
+const (
+	MaxMetaSize = 1 * 1024 * 1024  // 1M
+	MaxTextSize = 1 * 1024 * 1024  // 1M
+	MaxFileSize = 50 * 1024 * 1024 // 50M
 )
 
 var (
@@ -20,6 +29,7 @@ var (
 	ErrCardLength    = errors.New("need 16 digits")
 	ErrCardMonth     = errors.New("month between 1 and 12")
 	ErrMetaName      = fmt.Errorf("bad key %s", models.MetaKeyName)
+	ErrMaxFileSize   = fmt.Errorf("max file size %dM", MaxFileSize/1024/1024)
 )
 
 func tuiFormAddOrEditSecret(secret *models.Secret, save *bool, fn func(*models.Secret) (string, error)) (*huh.Form, error) {
@@ -154,6 +164,8 @@ func tuiFormText(secret *models.Secret, save *bool) *huh.Form {
 		huh.NewText().
 			Key("Text").
 			Title("Text").
+			Description(fmt.Sprintf("Max charecter %d", MaxTextSize)).
+			CharLimit(MaxTextSize).
 			Validate(func(data string) error {
 				if data == "" {
 					return ErrRequiredField
@@ -173,6 +185,7 @@ func tuiFormFile(secret *models.Secret, save *bool, fn func(*models.Secret) (str
 			ShowSize(true).
 			Key("File").
 			Title("File").
+			Description(fmt.Sprintf("Max file size is %dM", MaxFileSize/1024/1024)).
 			Value(&secret.Data.File.Path),
 	}
 	if len(secret.Data.File.Data) != 0 {
@@ -221,8 +234,18 @@ func tuiFormHelper(secret *models.Secret, save *bool, opts []huh.Field) *huh.For
 			Value(save).
 			Validate(func(b bool) error {
 				if b {
-					if secret.Type == models.SecretTypeFile && secret.ID == 0 && secret.Data.File.Path == "" {
-						return fmt.Errorf("file: %w", ErrRequiredField)
+					if secret.Type == models.SecretTypeFile && secret.ID == 0 {
+						if secret.Data.File.Path == "" {
+							return fmt.Errorf("file: %w", ErrRequiredField)
+						} else {
+							info, err := os.Stat(secret.Data.File.Path)
+							if err != nil {
+								return err
+							}
+							if info.Size() > MaxFileSize {
+								return ErrMaxFileSize
+							}
+						}
 					}
 				}
 				return nil
@@ -244,11 +267,12 @@ func tuiFormHelper(secret *models.Secret, save *bool, opts []huh.Field) *huh.For
 func tuiMeta(meta models.Meta) *huh.Text {
 	metaStr, err := meta.PrettyString()
 	if err != nil {
-		// TODO залогировать ошибку
+		logger.Logger.Error("error meta", slog.String("error", err.Error()))
 	}
 	return huh.NewText().
 		Title("Meta info").
-		Description("json dict format. Key __name__ is not allowed to be used.").
+		CharLimit(MaxMetaSize).
+		Description(fmt.Sprintf("json dict format. Key __name__ is not allowed to be used. Max charecter %d", MaxMetaSize)).
 		Validate(func(data string) error {
 			clear(meta)
 			if data == "" {
