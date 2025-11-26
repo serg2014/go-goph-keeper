@@ -18,7 +18,8 @@ var f *os.File
 
 func Init(logdir string) error {
 	// Setup logging
-	f, err := os.OpenFile(path.Join(logdir, "log.json"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	var err error
+	f, err = os.OpenFile(path.Join(logdir, "log.json"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrOpenLog, err)
 	}
@@ -29,5 +30,7 @@ func Init(logdir string) error {
 }
 
 func Close() {
-	f.Close()
+	if f != nil {
+		f.Close()
+	}
 }
