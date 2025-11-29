@@ -2,9 +2,12 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path"
+	"strconv"
+	"time"
 
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
 )
@@ -14,13 +17,82 @@ const (
 )
 
 // TODO
-func (app *ClientApp) crypt(in []byte) error {
+func crypt(in []byte) error {
 	return nil
 }
 
 // TODO
-func (app *ClientApp) decrypt(in []byte) error {
+func decrypt(in []byte) error {
 	return nil
+}
+
+type CryptFile struct {
+	file *os.File
+}
+
+func NewCryptFile(file *os.File) *CryptFile {
+	return &CryptFile{file: file}
+}
+
+func (c *CryptFile) Write(p []byte) (int, error) {
+	err := crypt(p)
+	if err != nil {
+		return 0, err
+	}
+	return c.file.Write(p)
+}
+
+func (c *CryptFile) Read(p []byte) (int, error) {
+	err := decrypt(p)
+	if err != nil {
+		return 0, err
+	}
+	return c.file.Read(p)
+}
+
+func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFilename string) (string, error) {
+	fileR, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer fileR.Close()
+
+	if cryptFilename == "" {
+		cryptFilename = path.Join(app.config.DataDir(), strconv.FormatInt(time.Now().Unix(), 10))
+	}
+	fileW, err := os.OpenFile(cryptFilename, os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", cryptFilename, err)
+	}
+	defer fileW.Close()
+	cryptFile := NewCryptFile(fileW)
+
+	_, err = io.Copy(cryptFile, fileR)
+	if err != nil {
+		return "", err
+	}
+
+	return cryptFilename, nil
+}
+
+func (app *ClientApp) DescryptFileFromLocalStorage(filePath string) (string, error) {
+	fileR, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer fileR.Close()
+	cryptFile := NewCryptFile(fileR)
+
+	_, name := path.Split(filePath)
+	path := path.Join(app.config.TmpDirPath(), name)
+	fileW, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return "", err
+	}
+	defer fileW.Close()
+
+	io.Copy(fileW, cryptFile)
+	return path, nil
 }
 
 func (app *ClientApp) NewSecretFromSecretDB(secretDB *models.SecretDB) (*models.Secret, error) {
@@ -36,11 +108,9 @@ func (app *ClientApp) NewSecretFromSecretDB(secretDB *models.SecretDB) (*models.
 	secret.Name = secret.Meta[models.MetaKeyName]
 	delete(secret.Meta, models.MetaKeyName)
 
-	if secretDB.Data != nil {
-		err = app.transformDBToData(secret, secretDB)
-		if err != nil {
-			return nil, err
-		}
+	err = app.transformDBToData(secret, secretDB)
+	if err != nil {
+		return nil, err
 	}
 
 	return secret, nil
@@ -69,36 +139,16 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 	var err error
 	switch secret.Type {
 	case models.SecretTypeFile:
-		if secret.Data.File.Path == "" {
+		// for edit secret, when file not change
+		if secret.Data.FilePath == "" {
 			break
 		}
-		cwd, err := os.Getwd()
+
+		cryptPath, err := app.CopyFileToLocalStorage(secret.Data.FilePath, secret.Data.OldFilePath)
 		if err != nil {
 			return err
 		}
-		// read file
-		file, err := os.Open(path.Join(cwd, secret.Data.File.Path))
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-
-		chunk := make([]byte, MaxChunkSizeBytes)
-		off := 0
-		work := true
-		for work {
-			n, err := file.ReadAt(chunk, int64(off))
-			if err != nil {
-				if err == io.EOF {
-					work = false
-				} else {
-					return err
-				}
-			}
-			off += n
-			secretDB.Data = append(secretDB.Data, chunk[:n]...)
-		}
-
+		secretDB.FilePath = cryptPath
 	case models.SecretTypeText:
 		secretDB.Data = []byte(secret.Data.Text)
 	default:
@@ -110,7 +160,7 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 	}
 
 	if len(secretDB.Data) != 0 {
-		err = app.crypt(secretDB.Data)
+		err = crypt(secretDB.Data)
 		if err != nil {
 			return err
 		}
@@ -119,14 +169,18 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 }
 
 func (app *ClientApp) transformDBToData(secret *models.Secret, secretDB *models.SecretDB) error {
-	err := app.decrypt(secretDB.Data)
-	if err != nil {
-		return err
+	var err error
+	if len(secretDB.Data) != 0 {
+		err = decrypt(secretDB.Data)
+		if err != nil {
+			return err
+		}
 	}
 
 	switch secret.Type {
 	case models.SecretTypeFile:
-		secret.Data.File.Data = secretDB.Data
+		secret.Data.FilePath = secretDB.FilePath
+		secret.Data.OldFilePath = secretDB.FilePath
 	case models.SecretTypeText:
 		secret.Data.Text = string(secretDB.Data)
 	default:
@@ -146,7 +200,7 @@ func (app *ClientApp) transformMetaToDB(secret *models.Secret, secretDB *models.
 	if err != nil {
 		return err
 	}
-	err = app.crypt(secretDB.Meta)
+	err = crypt(secretDB.Meta)
 	if err != nil {
 		return err
 	}
@@ -155,7 +209,7 @@ func (app *ClientApp) transformMetaToDB(secret *models.Secret, secretDB *models.
 
 func (app *ClientApp) transformDBToMeta(secret *models.Secret, secretDB *models.SecretDB) error {
 	var err error
-	err = app.decrypt(secretDB.Meta)
+	err = decrypt(secretDB.Meta)
 	if err != nil {
 		return err
 	}

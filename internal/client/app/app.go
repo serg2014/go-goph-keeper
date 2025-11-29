@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path"
-	"strconv"
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/client/config"
@@ -94,34 +92,15 @@ func (app *ClientApp) GetSecret(ctx context.Context, id int) (*models.Secret, er
 	return secret, nil
 }
 
-func (app *ClientApp) SaveSecterToFile(secret *models.Secret) (string, error) {
-	path := path.Join(app.config.TmpDirPath(), strconv.Itoa(secret.ID))
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
-	if err != nil {
-		return "", err
-	}
-
-	off := 0
-	max := len(secret.Data.File.Data)
-	for i := 0; i < max; i += MaxChunkSizeBytes {
-		j := i + MaxChunkSizeBytes
-		if j > max {
-			j = max
-		}
-		n, err := f.WriteAt(secret.Data.File.Data[i:j], int64(off))
-		if err != nil {
-			return "", err
-		}
-		off += n
-	}
-	return path, nil
-}
-
-func (app *ClientApp) DeleteSecret(ctx context.Context, id int) error {
+func (app *ClientApp) DeleteSecret(ctx context.Context, id int, filePath string) error {
 	err := app.store.DeleteSecret(ctx, id)
 	if err != nil {
 		return err
 	}
+	if filePath != "" {
+		return os.Remove(filePath)
+	}
+
 	return nil
 }
 

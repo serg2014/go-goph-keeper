@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -53,7 +54,7 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 
 	// show form for edit secret
 	save := false
-	form, err = tuiFormAddOrEditSecret(secret, &save, app.SaveSecterToFile)
+	form, err = tuiFormAddOrEditSecret(secret, &save, app.DescryptFileFromLocalStorage)
 	if err != nil {
 		return err
 	}
@@ -63,13 +64,16 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 		return err
 	}
 
+	if secret.Data.TmpFilePath != "" {
+		os.Remove(secret.Data.TmpFilePath)
+	}
 	if save {
 		err = app.UpdateSecret(ctx, secret)
 		if err != nil {
 			return err
 		}
 	} else if form.GetBool("delete") {
-		err = app.DeleteSecret(ctx, secret.ID)
+		err = app.DeleteSecret(ctx, secret.ID, secret.Data.OldFilePath)
 		if err != nil {
 			return err
 		}
@@ -105,7 +109,7 @@ func addSecret(ctx context.Context, app *app.ClientApp) error {
 	}
 
 	save := false
-	form, err = tuiFormAddOrEditSecret(secret, &save, app.SaveSecterToFile)
+	form, err = tuiFormAddOrEditSecret(secret, &save, app.DescryptFileFromLocalStorage)
 	if err != nil {
 		return err
 	}

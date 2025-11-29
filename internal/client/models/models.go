@@ -3,10 +3,11 @@ package models
 import "encoding/json"
 
 type SecretDB struct {
-	ID   int
-	Type SecretType
-	Meta []byte
-	Data []byte
+	ID       int
+	Type     SecretType
+	Meta     []byte
+	Data     []byte
+	FilePath string
 }
 
 type Secret struct {
@@ -60,7 +61,9 @@ type Data struct {
 	LoginPassword *LoginPassword `json:"login_password,omitempty"`
 	CreditCard    *CreditCard    `json:"credit_card,omitempty"`
 	Text          string         `json:"-"`
-	File          FileData       `json:"-"`
+	FilePath      string         `json:"-"`
+	OldFilePath   string         `json:"-"`
+	TmpFilePath   string         `json:"-"`
 }
 
 type LoginPassword struct {
@@ -72,9 +75,4 @@ type CreditCard struct {
 	Number string `json:"number,omitempty"`
 	Exp    string `json:"exp,omitempty"`
 	Cvv    string `json:"cvv,omitempty"`
-}
-
-type FileData struct {
-	Path string
-	Data []byte
 }

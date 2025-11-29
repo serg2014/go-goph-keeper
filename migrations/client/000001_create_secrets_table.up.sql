@@ -8,5 +8,7 @@ CREATE TABLE IF NOT EXISTS secrets_type (
     type text(255) NOT NULL
 );
 
-INSERT INTO secrets_type VALUES(0, 'login_password');
-INSERT INTO secrets_type VALUES(1, 'credit_card');
+INSERT INTO secrets_type (id, type) VALUES(0, 'login_password');
+INSERT INTO secrets_type (id, type) VALUES(1, 'credit_card');
+INSERT INTO secrets_type (id, type) VALUES(2, 'text');
+INSERT INTO secrets_type (id, type) VALUES(3, 'file');

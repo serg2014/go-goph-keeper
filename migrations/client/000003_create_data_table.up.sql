@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS data (
     version integer,
     updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
     need_update integer(1) NOT NULL DEFAULT (0),
-    data blob NOT NULL
+    file_path text(255),
+    data blob NULL
 );
 CREATE UNIQUE INDEX data_secret_id_idx ON data (secret_id);

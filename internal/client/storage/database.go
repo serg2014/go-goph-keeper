@@ -82,9 +82,13 @@ func (s *storageDB) UpdateSecret(ctx context.Context, secretDB *models.SecretDB)
 		query = `UPDATE data SET data=?, updated_at=strftime('%s', 'now'), need_update=? 
 		WHERE secret_id=?`
 		_, err = s.db.ExecContext(ctx, query, secretDB.Data, need_update, secretDB.ID)
-		if err != nil {
-			return err
-		}
+	} else if secretDB.FilePath != "" {
+		query = `UPDATE data SET file_path=?, updated_at=strftime('%s', 'now'), need_update=? 
+		WHERE secret_id=?`
+		_, err = s.db.ExecContext(ctx, query, secretDB.FilePath, need_update, secretDB.ID)
+	}
+	if err != nil {
+		return err
 	}
 
 	return tx.Commit()
@@ -147,8 +151,13 @@ func (s *storageDB) AddSecret(ctx context.Context, secretDB *models.SecretDB) er
 	}
 	dataID.Int64--
 
-	query = `INSERT INTO data (id, secret_id, data) VALUES(?,?,?)`
-	_, err = tx.ExecContext(ctx, query, dataID.Int64, secretID.Int64, secretDB.Data)
+	if secretDB.FilePath != "" {
+		query = `INSERT INTO data (id, secret_id, file_path) VALUES(?,?,?)`
+		_, err = tx.ExecContext(ctx, query, dataID.Int64, secretID.Int64, secretDB.FilePath)
+	} else {
+		query = `INSERT INTO data (id, secret_id, data) VALUES(?,?,?)`
+		_, err = tx.ExecContext(ctx, query, dataID.Int64, secretID.Int64, secretDB.Data)
+	}
 	if err != nil {
 		return err
 	}
@@ -184,15 +193,14 @@ func (s *storageDB) SecretsList(ctx context.Context) ([]models.SecretDB, error) 
 }
 
 func (s *storageDB) GetSecret(ctx context.Context, id int) (*models.SecretDB, error) {
-	// TODO не читать блоб для бинаря
-	query := `SELECT s.id, s.type, m."data" as meta, d.data
+	query := `SELECT s.id, s.type, m."data" as meta, d.data, d.file_path
 	FROM secrets as s 
 	JOIN meta as m ON m.secret_id = s.id
 	JOIN data as d ON d.secret_id = s.id
 	WHERE s.id = ?`
 	row := s.db.QueryRowContext(ctx, query, id)
 	secretDB := &models.SecretDB{}
-	err := row.Scan(&secretDB.ID, &secretDB.Type, &secretDB.Meta, &secretDB.Data)
+	err := row.Scan(&secretDB.ID, &secretDB.Type, &secretDB.Meta, &secretDB.Data, &secretDB.FilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +217,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, id int) error {
 
 	if id > 0 {
 		query := `INSERT INTO deleted (secret_id, id, type, version) 
-		SELECT id, 0, version 
+		SELECT secret_id, id, 1, version 
 		FROM meta 
 		WHERE secret_id=?`
 		_, err = tx.ExecContext(ctx, query, id, id)
@@ -218,7 +226,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, id int) error {
 		}
 
 		query = `INSERT INTO deleted (secret_id, id, type, version) 
-		SELECT id, 1, version 
+		SELECT secret_id, id, 2, version 
 		FROM data 
 		WHERE secret_id=?`
 		_, err = tx.ExecContext(ctx, query, id, id)

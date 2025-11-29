@@ -15,6 +15,7 @@ import (
 const (
 	DefaultDirName = "goph-keeper-client-data"
 	DefaultLogsDir = "logs"
+	DataDir        = "data"
 	TmpDirName     = "tmp"
 	DbName         = "keeper.db"
 )
@@ -185,4 +186,8 @@ func (c *Config) TmpDirPath() string {
 
 func (c *Config) DbPath() string {
 	return path.Join(c.WorkingDir, DbName)
+}
+
+func (c *Config) DataDir() string {
+	return path.Join(c.WorkingDir, DataDir)
 }

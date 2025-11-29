@@ -1,1 +1,2 @@
 DROP TABLE IF EXISTS deleted;
+DROP TABLE IF EXISTS deleted_type;

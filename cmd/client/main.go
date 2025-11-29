@@ -183,6 +183,11 @@ func initWorkSpace(c *config.Config) error {
 		return fmt.Errorf("%w: %w", ErrLogDir, err)
 	}
 
+	err = os.Mkdir(c.DataDir(), 0700)
+	if err != nil && !errors.Is(err, fs.ErrExist) {
+		return fmt.Errorf("%w: %w", ErrLogDir, err)
+	}
+
 	return nil
 }
 

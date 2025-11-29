@@ -32,7 +32,7 @@ var (
 	ErrMaxFileSize   = fmt.Errorf("max file size %dM", MaxFileSize/1024/1024)
 )
 
-func tuiFormAddOrEditSecret(secret *models.Secret, save *bool, fn func(*models.Secret) (string, error)) (*huh.Form, error) {
+func tuiFormAddOrEditSecret(secret *models.Secret, save *bool, fn func(string) (string, error)) (*huh.Form, error) {
 	var form *huh.Form
 	switch secret.Type {
 	case models.SecretTypeLogingPassword:
@@ -177,8 +177,17 @@ func tuiFormText(secret *models.Secret, save *bool) *huh.Form {
 	return tuiFormHelper(secret, save, opts)
 }
 
-func tuiFormFile(secret *models.Secret, save *bool, fn func(*models.Secret) (string, error)) *huh.Form {
-	secret.Data.File.Path = ""
+func tuiFormFile(secret *models.Secret, save *bool, fn func(string) (string, error)) *huh.Form {
+	var size int
+	path := secret.Data.FilePath
+	if path != "" {
+		info, err := os.Stat(path)
+		if err == nil {
+			size = int(info.Size())
+		}
+
+	}
+	secret.Data.FilePath = ""
 	opts := []huh.Field{
 		huh.NewFilePicker().
 			ShowHidden(true). // do not work
@@ -186,10 +195,11 @@ func tuiFormFile(secret *models.Secret, save *bool, fn func(*models.Secret) (str
 			Key("File").
 			Title("File").
 			Description(fmt.Sprintf("Max file size is %dM", MaxFileSize/1024/1024)).
-			Value(&secret.Data.File.Path),
+			Value(&secret.Data.FilePath),
 	}
-	if len(secret.Data.File.Data) != 0 {
-		desc := fmt.Sprintf("File with size: %d in vault", len(secret.Data.File.Data))
+	if size != 0 {
+		var show bool
+		desc := fmt.Sprintf("File with size: %d in vault", size)
 		opts = append(opts,
 			huh.NewConfirm().
 				DescriptionFunc(func() string {
@@ -199,14 +209,16 @@ func tuiFormFile(secret *models.Secret, save *bool, fn func(*models.Secret) (str
 				Key("download_file").
 				Validate(func(b bool) error {
 					if b {
-						path, err := fn(secret)
+						path, err := fn(path)
 						if err != nil {
 							return err
 						}
+						secret.Data.TmpFilePath = path
 						desc += fmt.Sprintf("\nFile in %s\n", path)
+						show = false
 					}
 					return nil
-				}),
+				}).Value(&show),
 		)
 	}
 	return tuiFormHelper(secret, save, opts)
@@ -235,10 +247,10 @@ func tuiFormHelper(secret *models.Secret, save *bool, opts []huh.Field) *huh.For
 			Validate(func(b bool) error {
 				if b {
 					if secret.Type == models.SecretTypeFile && secret.ID == 0 {
-						if secret.Data.File.Path == "" {
+						if secret.Data.FilePath == "" {
 							return fmt.Errorf("file: %w", ErrRequiredField)
 						} else {
-							info, err := os.Stat(secret.Data.File.Path)
+							info, err := os.Stat(secret.Data.FilePath)
 							if err != nil {
 								return err
 							}
