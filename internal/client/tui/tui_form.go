@@ -179,9 +179,9 @@ func tuiFormText(secret *models.Secret, save *bool) *huh.Form {
 
 func tuiFormFile(secret *models.Secret, save *bool, fn func(string) (string, error)) *huh.Form {
 	var size int
-	path := secret.Data.FilePath
-	if path != "" {
-		info, err := os.Stat(path)
+	cryptPath := secret.Data.FilePath
+	if cryptPath != "" {
+		info, err := os.Stat(cryptPath)
 		if err == nil {
 			size = int(info.Size())
 		}
@@ -209,12 +209,13 @@ func tuiFormFile(secret *models.Secret, save *bool, fn func(string) (string, err
 				Key("download_file").
 				Validate(func(b bool) error {
 					if b {
-						path, err := fn(path)
+						decryptPath, err := fn(cryptPath)
 						if err != nil {
 							return err
 						}
-						secret.Data.TmpFilePath = path
-						desc += fmt.Sprintf("\nFile in %s\n", path)
+						secret.Data.TmpFilePath = decryptPath
+						desc += fmt.Sprintf("\nFile in %s\n", decryptPath)
+						// сбросить нажатие кнопки
 						show = false
 					}
 					return nil

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -50,19 +51,19 @@ func (c *CryptFile) Read(p []byte) (int, error) {
 	return c.file.Read(p)
 }
 
-func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFilename string) (string, error) {
+func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFilePath string) (string, error) {
 	fileR, err := os.Open(filePath)
 	if err != nil {
 		return "", err
 	}
 	defer fileR.Close()
 
-	if cryptFilename == "" {
-		cryptFilename = path.Join(app.config.DataDir(), strconv.FormatInt(time.Now().Unix(), 10))
+	if cryptFilePath == "" {
+		cryptFilePath = path.Join(app.config.DataDir(), strconv.FormatInt(time.Now().Unix(), 10))
 	}
-	fileW, err := os.OpenFile(cryptFilename, os.O_CREATE|os.O_WRONLY, 0600)
+	fileW, err := os.OpenFile(cryptFilePath, os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
-		return "", fmt.Errorf("%s: %w", cryptFilename, err)
+		return "", fmt.Errorf("%s: %w", cryptFilePath, err)
 	}
 	defer fileW.Close()
 	cryptFile := NewCryptFile(fileW)
@@ -72,7 +73,7 @@ func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFilename stri
 		return "", err
 	}
 
-	return cryptFilename, nil
+	return path.Base(cryptFilePath), nil
 }
 
 func (app *ClientApp) DescryptFileFromLocalStorage(filePath string) (string, error) {
@@ -85,6 +86,11 @@ func (app *ClientApp) DescryptFileFromLocalStorage(filePath string) (string, err
 
 	_, name := path.Split(filePath)
 	path := path.Join(app.config.TmpDirPath(), name)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+
 	fileW, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return "", err
@@ -92,7 +98,7 @@ func (app *ClientApp) DescryptFileFromLocalStorage(filePath string) (string, err
 	defer fileW.Close()
 
 	io.Copy(fileW, cryptFile)
-	return path, nil
+	return absPath, nil
 }
 
 func (app *ClientApp) NewSecretFromSecretDB(secretDB *models.SecretDB) (*models.Secret, error) {
@@ -144,11 +150,12 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 			break
 		}
 
-		cryptPath, err := app.CopyFileToLocalStorage(secret.Data.FilePath, secret.Data.OldFilePath)
+		cryptName, err := app.CopyFileToLocalStorage(secret.Data.FilePath, secret.Data.OldFilePath)
 		if err != nil {
 			return err
 		}
-		secretDB.FilePath = cryptPath
+		// в базе храним относительные пути
+		secretDB.FilePath = cryptName
 	case models.SecretTypeText:
 		secretDB.Data = []byte(secret.Data.Text)
 	default:
@@ -179,8 +186,9 @@ func (app *ClientApp) transformDBToData(secret *models.Secret, secretDB *models.
 
 	switch secret.Type {
 	case models.SecretTypeFile:
-		secret.Data.FilePath = secretDB.FilePath
-		secret.Data.OldFilePath = secretDB.FilePath
+		// в базе пути хранятся относительно DataDir
+		secret.Data.FilePath = path.Join(app.config.DataDir(), secretDB.FilePath)
+		secret.Data.OldFilePath = secret.Data.FilePath
 	case models.SecretTypeText:
 		secret.Data.Text = string(secretDB.Data)
 	default:

@@ -14,7 +14,7 @@ import (
 
 const (
 	DefaultDirName = "goph-keeper-client-data"
-	DefaultLogsDir = "logs"
+	LogsDir        = "logs"
 	DataDir        = "data"
 	TmpDirName     = "tmp"
 	DbName         = "keeper.db"
@@ -28,8 +28,10 @@ type Config struct {
 	ConfigPath string `env:"CONFIG,unset" json:"-"`
 	// ServerAddress remote server to sync data
 	ServerAddress ServerAddress `env:"SERVER_ADDRESS" json:"server_address"`
-	// LogDir path to logs
-	LogDir string `env:"LOG_DIR" json:"log_dir"`
+	// logDir path to logs
+	logDir string
+	// cwd current working directory
+	cwd string
 }
 
 type ServerAddress struct {
@@ -77,7 +79,13 @@ func (s *ServerAddress) UnmarshalJSON(data []byte) error {
 // newConfig create a new *config
 func NewConfig() (*Config, error) {
 	c := &Config{}
-	err := c.setDefaults()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	c.cwd = cwd
+
+	err = c.setDefaults()
 	if err != nil {
 		return nil, err
 	}
@@ -91,17 +99,11 @@ func NewConfig() (*Config, error) {
 
 func (c *Config) setDefaults() error {
 	if c.WorkingDir == "" {
-		dir, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		c.WorkingDir = path.Join(dir, DefaultDirName)
+		c.WorkingDir = DefaultDirName
 	}
+
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
-	}
-	if c.LogDir == "" {
-		c.LogDir = path.Join(c.WorkingDir, DefaultLogsDir)
 	}
 
 	if c.ServerAddress.Host == "" {
@@ -118,7 +120,6 @@ func (c *Config) Init() error {
 	flag.StringVar(&c.LogLevel, "l", c.LogLevel, "log level")
 	flag.StringVar(&c.ConfigPath, "config", "", "path to config(format json)")
 	flag.Var(&c.ServerAddress, "a", "remote server address")
-	flag.StringVar(&c.LogDir, "ld", c.LogDir, "path to logs")
 	flag.Parse()
 
 	err := env.Parse(c)
@@ -190,4 +191,8 @@ func (c *Config) DbPath() string {
 
 func (c *Config) DataDir() string {
 	return path.Join(c.WorkingDir, DataDir)
+}
+
+func (c *Config) LogDir() string {
+	return path.Join(c.WorkingDir, LogsDir)
 }
