@@ -73,7 +73,8 @@ func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFilePath stri
 		return "", err
 	}
 
-	return path.Base(cryptFilePath), nil
+	_, name := path.Split(cryptFilePath)
+	return name, nil
 }
 
 func (app *ClientApp) DescryptFileFromLocalStorage(filePath string) (string, error) {
