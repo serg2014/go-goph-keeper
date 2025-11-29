@@ -15,6 +15,13 @@ import (
 	// _ "modernc.org/sqlite"
 )
 
+type TypeId int
+
+const (
+	MetaID TypeId = iota + 1
+	DataID
+)
+
 type storageDB struct {
 	db *sql.DB
 }
@@ -208,20 +215,20 @@ func (s *storageDB) DeleteSecret(ctx context.Context, id int) error {
 	defer tx.Rollback()
 
 	if id > 0 {
-		query := `INSERT INTO deleted (secret_id, id, type, version) 
-		SELECT secret_id, id, 1, version 
+		query := `INSERT INTO deleted (secret_id, id, type_id, version) 
+		SELECT secret_id, id, ?, version 
 		FROM meta 
 		WHERE secret_id=?`
-		_, err = tx.ExecContext(ctx, query, id, id)
+		_, err = tx.ExecContext(ctx, query, MetaID, id, id)
 		if err != nil {
 			return err
 		}
 
-		query = `INSERT INTO deleted (secret_id, id, type, version) 
-		SELECT secret_id, id, 2, version 
+		query = `INSERT INTO deleted (secret_id, id, type_id, version) 
+		SELECT secret_id, id, ?, version 
 		FROM data 
 		WHERE secret_id=?`
-		_, err = tx.ExecContext(ctx, query, id, id)
+		_, err = tx.ExecContext(ctx, query, DataID, id, id)
 		if err != nil {
 			return err
 		}
