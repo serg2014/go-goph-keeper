@@ -3,18 +3,17 @@ package models
 import "encoding/json"
 
 type SecretDB struct {
-	ID       int
-	Type     SecretType
-	Meta     []byte
-	Data     []byte
-	FilePath string
+	ID   int
+	Type SecretType
+	Meta []byte
+	Data []byte
 }
 
 type Secret struct {
 	ID   int
 	Type SecretType
-	Name string
-	Meta Meta
+	// Name string
+	Meta BlockMeta
 	Data Data
 }
 
@@ -43,6 +42,10 @@ func (s SecretType) String() string {
 	}
 }
 
+type BlockMeta struct {
+	Meta         Meta         `json:"meta,omitempty"`
+	InternalMeta InternalMeta `json:"internal"`
+}
 type Meta map[string]string
 
 func (m *Meta) PrettyString() (string, error) {
@@ -54,26 +57,21 @@ func (m *Meta) PrettyString() (string, error) {
 }
 
 type InternalMeta struct {
-	SecretName   string `json:"secret_name"`
-	OrigFileName string `json:"orig_filename,omitempty"`
+	SecretName string `json:"secret_name"`
 }
-
-const (
-	MetaKeyInternal = "__internal__"
-)
 
 type Data struct {
 	LoginPassword *LoginPassword `json:"login_password,omitempty"`
 	CreditCard    *CreditCard    `json:"credit_card,omitempty"`
 	Text          string         `json:"-"`
-	FilePath      FilePath       `json:"-"`
+	FilePath      FilePath       `json:"file_path,omitempty"`
 }
 
 type FilePath struct {
-	Path     string
-	OldPath  string
-	TmpPath  string
-	OrigName string
+	Path     string `json:"path"`
+	OrigName string `json:"orig_name"`
+	OldPath  string `json:"-"`
+	TmpPath  string `json:"-"`
 }
 
 type LoginPassword struct {

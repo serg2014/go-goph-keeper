@@ -28,7 +28,7 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 	opts := make([]huh.Option[*models.Secret], 0, len(secrets))
 	for _, item := range secrets {
 		b := strings.Builder{}
-		b.WriteString(item.Name)
+		b.WriteString(item.Meta.InternalMeta.SecretName)
 		b.WriteString(" ")
 		b.WriteString(item.Type.String())
 		opts = append(opts, huh.NewOption(b.String(), &item))
@@ -105,7 +105,9 @@ func addSecret(ctx context.Context, app *app.ClientApp) error {
 
 	secret := &models.Secret{
 		Type: secretType,
-		Meta: make(models.Meta),
+		Meta: models.BlockMeta{
+			Meta: make(models.Meta),
+		},
 	}
 
 	save := false

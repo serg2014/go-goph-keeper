@@ -29,7 +29,6 @@ var (
 	ErrCardCvvLength = errors.New("3 digit")
 	ErrCardLength    = errors.New("need 16 digits")
 	ErrCardMonth     = errors.New("month between 1 and 12")
-	ErrMetaInternal  = fmt.Errorf("bad key %s", models.MetaKeyInternal)
 	ErrMaxFileSize   = fmt.Errorf("max file size %dM", MaxFileSize/1024/1024)
 )
 
@@ -237,11 +236,11 @@ func tuiFormHelper(secret *models.Secret, save *bool, opts []huh.Field) *huh.For
 				}
 				return nil
 			}).
-			Value(&secret.Name),
+			Value(&secret.Meta.InternalMeta.SecretName),
 	}
 	options = append(options, opts...)
 	options = append(options,
-		tuiMeta(secret.Meta),
+		tuiMeta(secret.Meta.Meta),
 		huh.NewConfirm().
 			Title("Save changes?").
 			Key("save").
@@ -289,7 +288,7 @@ func tuiMeta(meta models.Meta) *huh.Text {
 	return huh.NewText().
 		Title("Meta info").
 		CharLimit(MaxMetaSize).
-		Description(fmt.Sprintf("json dict format. Key %s is not allowed to be used. Max charecter %d", models.MetaKeyInternal, MaxMetaSize)).
+		Description(fmt.Sprintf("json dict format. Max charecter %d", MaxMetaSize)).
 		Validate(func(data string) error {
 			clear(meta)
 			if data == "" {
@@ -298,9 +297,6 @@ func tuiMeta(meta models.Meta) *huh.Text {
 			err := json.Unmarshal([]byte(data), &meta)
 			if err != nil {
 				return fmt.Errorf("%w: %w", ErrNotDict, err)
-			}
-			if _, ok := meta[models.MetaKeyInternal]; ok {
-				return ErrMetaInternal
 			}
 			return nil
 		}).

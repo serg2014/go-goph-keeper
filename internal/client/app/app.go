@@ -73,7 +73,8 @@ func (app *ClientApp) SecretsList(ctx context.Context) ([]models.Secret, error) 
 		if err != nil {
 			return nil, err
 		}
-		item.Meta = nil
+		// TODO
+		item.Meta.Meta = nil
 		secrets = append(secrets, *item)
 	}
 	return secrets, nil

@@ -78,15 +78,10 @@ func (s *storageDB) UpdateSecret(ctx context.Context, secretDB *models.SecretDB)
 		return err
 	}
 
-	if len(secretDB.Data) != 0 {
-		query = `UPDATE data SET data=?, updated_at=strftime('%s', 'now'), need_update=? 
+	query = `UPDATE data SET data=?, updated_at=strftime('%s', 'now'), need_update=? 
 		WHERE secret_id=?`
-		_, err = s.db.ExecContext(ctx, query, secretDB.Data, need_update, secretDB.ID)
-	} else if secretDB.FilePath != "" {
-		query = `UPDATE data SET file_path=?, updated_at=strftime('%s', 'now'), need_update=? 
-		WHERE secret_id=?`
-		_, err = s.db.ExecContext(ctx, query, secretDB.FilePath, need_update, secretDB.ID)
-	}
+	_, err = s.db.ExecContext(ctx, query, secretDB.Data, need_update, secretDB.ID)
+
 	if err != nil {
 		return err
 	}
@@ -151,13 +146,8 @@ func (s *storageDB) AddSecret(ctx context.Context, secretDB *models.SecretDB) er
 	}
 	dataID.Int64--
 
-	if secretDB.FilePath != "" {
-		query = `INSERT INTO data (id, secret_id, file_path) VALUES(?,?,?)`
-		_, err = tx.ExecContext(ctx, query, dataID.Int64, secretID.Int64, secretDB.FilePath)
-	} else {
-		query = `INSERT INTO data (id, secret_id, data) VALUES(?,?,?)`
-		_, err = tx.ExecContext(ctx, query, dataID.Int64, secretID.Int64, secretDB.Data)
-	}
+	query = `INSERT INTO data (id, secret_id, data) VALUES(?,?,?)`
+	_, err = tx.ExecContext(ctx, query, dataID.Int64, secretID.Int64, secretDB.Data)
 	if err != nil {
 		return err
 	}
@@ -193,14 +183,14 @@ func (s *storageDB) SecretsList(ctx context.Context) ([]models.SecretDB, error) 
 }
 
 func (s *storageDB) GetSecret(ctx context.Context, id int) (*models.SecretDB, error) {
-	query := `SELECT s.id, s.type, m."data" as meta, d.data, d.file_path
+	query := `SELECT s.id, s.type, m."data" as meta, d.data
 	FROM secrets as s 
 	JOIN meta as m ON m.secret_id = s.id
 	JOIN data as d ON d.secret_id = s.id
 	WHERE s.id = ?`
 	row := s.db.QueryRowContext(ctx, query, id)
 	secretDB := &models.SecretDB{}
-	err := row.Scan(&secretDB.ID, &secretDB.Type, &secretDB.Meta, &secretDB.Data, &secretDB.FilePath)
+	err := row.Scan(&secretDB.ID, &secretDB.Type, &secretDB.Meta, &secretDB.Data)
 	if err != nil {
 		return nil, err
 	}

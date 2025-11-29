@@ -101,30 +101,20 @@ func (app *ClientApp) NewSecretFromSecretDB(secretDB *models.SecretDB) (*models.
 	secret := &models.Secret{
 		ID:   secretDB.ID,
 		Type: secretDB.Type,
-		Meta: make(models.Meta),
+		Meta: models.BlockMeta{
+			Meta: make(models.Meta),
+		},
 	}
 	err := app.transformDBToMeta(secret, secretDB)
 	if err != nil {
 		return nil, err
 	}
 
-	// get internal key
-	var internalMeta models.InternalMeta
-	err = json.Unmarshal([]byte(secret.Meta[models.MetaKeyInternal]), &internalMeta)
-	if err != nil {
-		return nil, fmt.Errorf("internal meta: %w", err)
-	}
-	delete(secret.Meta, models.MetaKeyInternal)
-	secret.Name = internalMeta.SecretName
-
 	// when use in list we do not have data
-	if secretDB.Data != nil || secret.Type == models.SecretTypeFile {
+	if secretDB.Data != nil {
 		err = app.transformDBToData(secret, secretDB)
 		if err != nil {
 			return nil, fmt.Errorf("transform db.data: %w", err)
-		}
-		if secret.Type == models.SecretTypeFile {
-			secret.Data.FilePath.OrigName = internalMeta.OrigFileName
 		}
 	}
 
@@ -137,18 +127,7 @@ func (app *ClientApp) NewSecretDBFromSecret(secret *models.Secret) (*models.Secr
 		Type: secret.Type,
 	}
 
-	// set internal key
-	internalMeta := models.InternalMeta{
-		SecretName:   secret.Name,
-		OrigFileName: secret.Data.FilePath.OrigName,
-	}
-	meta, err := json.Marshal(internalMeta)
-	if err != nil {
-		return nil, err
-	}
-	secret.Meta[models.MetaKeyInternal] = string(meta)
-
-	err = app.transformMetaToDB(secret, secretDB)
+	err := app.transformMetaToDB(secret, secretDB)
 	if err != nil {
 		return nil, err
 	}
@@ -175,15 +154,18 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 			return err
 		}
 		// в базе храним относительные пути
-		secretDB.FilePath = cryptName
+		secret.Data.FilePath.Path = cryptName
+		secretDB.Data, err = json.Marshal(secret.Data)
+		if err != nil {
+			return err
+		}
 	case models.SecretTypeText:
 		secretDB.Data = []byte(secret.Data.Text)
 	default:
 		secretDB.Data, err = json.Marshal(secret.Data)
-	}
-
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	if len(secretDB.Data) != 0 {
@@ -196,27 +178,29 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 }
 
 func (app *ClientApp) transformDBToData(secret *models.Secret, secretDB *models.SecretDB) error {
-	var err error
 	if len(secretDB.Data) != 0 {
-		err = decrypt(secretDB.Data)
+		err := decrypt(secretDB.Data)
 		if err != nil {
-			return err
+			return fmt.Errorf("decrypt secret.data: %w", err)
 		}
 	}
 
 	switch secret.Type {
 	case models.SecretTypeFile:
+		err := json.Unmarshal(secretDB.Data, &secret.Data)
+		if err != nil {
+			return fmt.Errorf("unmarshal secret.data: %w", err)
+		}
 		// в базе пути хранятся относительно DataDir
-		secret.Data.FilePath.Path = path.Join(app.config.DataDir(), secretDB.FilePath)
+		secret.Data.FilePath.Path = path.Join(app.config.DataDir(), secret.Data.FilePath.Path)
 		secret.Data.FilePath.OldPath = secret.Data.FilePath.Path
 	case models.SecretTypeText:
 		secret.Data.Text = string(secretDB.Data)
 	default:
-		err = json.Unmarshal(secretDB.Data, &secret.Data)
-	}
-
-	if err != nil {
-		return err
+		err := json.Unmarshal(secretDB.Data, &secret.Data)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
