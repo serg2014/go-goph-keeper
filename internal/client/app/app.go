@@ -66,6 +66,7 @@ func (app *ClientApp) SecretsList(ctx context.Context) ([]models.Secret, error) 
 	if err != nil {
 		return nil, err
 	}
+
 	secrets := make([]models.Secret, 0, len(list))
 	for i := range list {
 		item, err := app.NewSecretFromSecretDB(&list[i])

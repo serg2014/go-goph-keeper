@@ -112,15 +112,20 @@ func (app *ClientApp) NewSecretFromSecretDB(secretDB *models.SecretDB) (*models.
 	var internalMeta models.InternalMeta
 	err = json.Unmarshal([]byte(secret.Meta[models.MetaKeyInternal]), &internalMeta)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("internal meta: %w", err)
 	}
 	delete(secret.Meta, models.MetaKeyInternal)
 	secret.Name = internalMeta.SecretName
-	secret.Data.FilePath.OrigName = internalMeta.OrigFileName
 
-	err = app.transformDBToData(secret, secretDB)
-	if err != nil {
-		return nil, err
+	// when use in list we do not have data
+	if secretDB.Data != nil || secret.Type == models.SecretTypeFile {
+		err = app.transformDBToData(secret, secretDB)
+		if err != nil {
+			return nil, fmt.Errorf("transform db.data: %w", err)
+		}
+		if secret.Type == models.SecretTypeFile {
+			secret.Data.FilePath.OrigName = internalMeta.OrigFileName
+		}
 	}
 
 	return secret, nil
@@ -239,7 +244,7 @@ func (app *ClientApp) transformDBToMeta(secret *models.Secret, secretDB *models.
 
 	err = json.Unmarshal(secretDB.Meta, &secret.Meta)
 	if err != nil {
-		return err
+		return fmt.Errorf("unmarshal meta: %w", err)
 	}
 
 	return nil

@@ -280,6 +280,7 @@ func tuiFormHelper(secret *models.Secret, save *bool, opts []huh.Field) *huh.For
 			}),
 	)
 }
+
 func tuiMeta(meta models.Meta) *huh.Text {
 	metaStr, err := meta.PrettyString()
 	if err != nil {
