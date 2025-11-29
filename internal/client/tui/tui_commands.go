@@ -109,6 +109,7 @@ func addSecret(ctx context.Context, app *app.ClientApp) error {
 	}
 
 	save := false
+	// show form for add secret
 	form, err = tuiFormAddOrEditSecret(secret, &save, app.DescryptFileFromLocalStorage)
 	if err != nil {
 		return err

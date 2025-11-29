@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 
@@ -28,11 +29,11 @@ var (
 	ErrCardCvvLength = errors.New("3 digit")
 	ErrCardLength    = errors.New("need 16 digits")
 	ErrCardMonth     = errors.New("month between 1 and 12")
-	ErrMetaName      = fmt.Errorf("bad key %s", models.MetaKeyName)
+	ErrMetaInternal  = fmt.Errorf("bad key %s", models.MetaKeyInternal)
 	ErrMaxFileSize   = fmt.Errorf("max file size %dM", MaxFileSize/1024/1024)
 )
 
-func tuiFormAddOrEditSecret(secret *models.Secret, save *bool, fn func(string) (string, error)) (*huh.Form, error) {
+func tuiFormAddOrEditSecret(secret *models.Secret, save *bool, fn func(string, string) (string, error)) (*huh.Form, error) {
 	var form *huh.Form
 	switch secret.Type {
 	case models.SecretTypeLogingPassword:
@@ -177,7 +178,7 @@ func tuiFormText(secret *models.Secret, save *bool) *huh.Form {
 	return tuiFormHelper(secret, save, opts)
 }
 
-func tuiFormFile(secret *models.Secret, save *bool, fn func(string) (string, error)) *huh.Form {
+func tuiFormFile(secret *models.Secret, save *bool, fn func(string, string) (string, error)) *huh.Form {
 	var size int
 	cryptPath := secret.Data.FilePath.Path
 	if cryptPath != "" {
@@ -199,7 +200,7 @@ func tuiFormFile(secret *models.Secret, save *bool, fn func(string) (string, err
 	}
 	if size != 0 {
 		var show bool
-		desc := fmt.Sprintf("File with size: %d in vault", size)
+		desc := fmt.Sprintf("File %s with size: %d in vault", secret.Data.FilePath.OrigName, size)
 		opts = append(opts,
 			huh.NewConfirm().
 				DescriptionFunc(func() string {
@@ -209,7 +210,7 @@ func tuiFormFile(secret *models.Secret, save *bool, fn func(string) (string, err
 				Key("download_file").
 				Validate(func(b bool) error {
 					if b {
-						decryptPath, err := fn(cryptPath)
+						decryptPath, err := fn(cryptPath, secret.Data.FilePath.OrigName)
 						if err != nil {
 							return err
 						}
@@ -251,6 +252,8 @@ func tuiFormHelper(secret *models.Secret, save *bool, opts []huh.Field) *huh.For
 						if secret.Data.FilePath.Path == "" {
 							return fmt.Errorf("file: %w", ErrRequiredField)
 						} else {
+							_, origName := path.Split(secret.Data.FilePath.Path)
+							secret.Data.FilePath.OrigName = origName
 							info, err := os.Stat(secret.Data.FilePath.Path)
 							if err != nil {
 								return err
@@ -285,7 +288,7 @@ func tuiMeta(meta models.Meta) *huh.Text {
 	return huh.NewText().
 		Title("Meta info").
 		CharLimit(MaxMetaSize).
-		Description(fmt.Sprintf("json dict format. Key __name__ is not allowed to be used. Max charecter %d", MaxMetaSize)).
+		Description(fmt.Sprintf("json dict format. Key %s is not allowed to be used. Max charecter %d", models.MetaKeyInternal, MaxMetaSize)).
 		Validate(func(data string) error {
 			clear(meta)
 			if data == "" {
@@ -295,8 +298,8 @@ func tuiMeta(meta models.Meta) *huh.Text {
 			if err != nil {
 				return fmt.Errorf("%w: %w", ErrNotDict, err)
 			}
-			if _, ok := meta[models.MetaKeyName]; ok {
-				return ErrMetaName
+			if _, ok := meta[models.MetaKeyInternal]; ok {
+				return ErrMetaInternal
 			}
 			return nil
 		}).

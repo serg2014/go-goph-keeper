@@ -73,16 +73,15 @@ func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFilePath stri
 	return name, nil
 }
 
-func (app *ClientApp) DescryptFileFromLocalStorage(filePath string) (string, error) {
-	fileR, err := os.Open(filePath)
+func (app *ClientApp) DescryptFileFromLocalStorage(cryptPath string, origName string) (string, error) {
+	fileR, err := os.Open(cryptPath)
 	if err != nil {
 		return "", err
 	}
 	defer fileR.Close()
 	cryptFile := NewCryptFile(fileR)
 
-	_, name := path.Split(filePath)
-	path := path.Join(app.config.TmpDirPath(), name)
+	path := path.Join(app.config.TmpDirPath(), origName)
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
@@ -108,8 +107,16 @@ func (app *ClientApp) NewSecretFromSecretDB(secretDB *models.SecretDB) (*models.
 	if err != nil {
 		return nil, err
 	}
-	secret.Name = secret.Meta[models.MetaKeyName]
-	delete(secret.Meta, models.MetaKeyName)
+
+	// get internal key
+	var internalMeta models.InternalMeta
+	err = json.Unmarshal([]byte(secret.Meta[models.MetaKeyInternal]), &internalMeta)
+	if err != nil {
+		return nil, err
+	}
+	delete(secret.Meta, models.MetaKeyInternal)
+	secret.Name = internalMeta.SecretName
+	secret.Data.FilePath.OrigName = internalMeta.OrigFileName
 
 	err = app.transformDBToData(secret, secretDB)
 	if err != nil {
@@ -124,8 +131,19 @@ func (app *ClientApp) NewSecretDBFromSecret(secret *models.Secret) (*models.Secr
 		ID:   secret.ID,
 		Type: secret.Type,
 	}
-	secret.Meta[models.MetaKeyName] = secret.Name
-	err := app.transformMetaToDB(secret, secretDB)
+
+	// set internal key
+	internalMeta := models.InternalMeta{
+		SecretName:   secret.Name,
+		OrigFileName: secret.Data.FilePath.OrigName,
+	}
+	meta, err := json.Marshal(internalMeta)
+	if err != nil {
+		return nil, err
+	}
+	secret.Meta[models.MetaKeyInternal] = string(meta)
+
+	err = app.transformMetaToDB(secret, secretDB)
 	if err != nil {
 		return nil, err
 	}

@@ -53,8 +53,12 @@ func (m *Meta) PrettyString() (string, error) {
 	return string(data), nil
 }
 
+type InternalMeta struct {
+	SecretName   string `json:"secret_name"`
+	OrigFileName string `json:"orig_filename,omitempty"`
+}
+
 const (
-	MetaKeyName     = "__name__"
 	MetaKeyInternal = "__internal__"
 )
 
