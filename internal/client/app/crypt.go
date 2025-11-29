@@ -13,10 +13,6 @@ import (
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
 )
 
-const (
-	MaxChunkSizeBytes = 1000
-)
-
 // TODO
 func crypt(in []byte) error {
 	return nil
