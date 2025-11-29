@@ -78,12 +78,15 @@ func (s *storageDB) UpdateSecret(ctx context.Context, secretDB *models.SecretDB)
 		return err
 	}
 
-	query = `UPDATE data SET data=?, updated_at=strftime('%s', 'now'), need_update=? 
+	// если изменили только meta
+	if len(secretDB.Data) != 0 {
+		query = `UPDATE data SET data=?, updated_at=strftime('%s', 'now'), need_update=? 
 		WHERE secret_id=?`
-	_, err = s.db.ExecContext(ctx, query, secretDB.Data, need_update, secretDB.ID)
+		_, err = s.db.ExecContext(ctx, query, secretDB.Data, need_update, secretDB.ID)
 
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()

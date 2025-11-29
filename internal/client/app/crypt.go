@@ -57,7 +57,7 @@ func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFilePath stri
 	if cryptFilePath == "" {
 		cryptFilePath = path.Join(app.config.DataDir(), strconv.FormatInt(time.Now().Unix(), 10))
 	}
-	fileW, err := os.OpenFile(cryptFilePath, os.O_CREATE|os.O_WRONLY, 0600)
+	fileW, err := os.OpenFile(cryptFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", cryptFilePath, err)
 	}
@@ -149,6 +149,7 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 			break
 		}
 
+		// TODO копировать в tmp, потом переименовать
 		cryptName, err := app.CopyFileToLocalStorage(secret.Data.FilePath.Path, secret.Data.FilePath.OldPath)
 		if err != nil {
 			return err

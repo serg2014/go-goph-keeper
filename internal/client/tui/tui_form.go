@@ -247,9 +247,11 @@ func tuiFormHelper(secret *models.Secret, save *bool, opts []huh.Field) *huh.For
 			Value(save).
 			Validate(func(b bool) error {
 				if b {
-					if secret.Type == models.SecretTypeFile && secret.ID == 0 {
+					if secret.Type == models.SecretTypeFile {
 						if secret.Data.FilePath.Path == "" {
-							return fmt.Errorf("file: %w", ErrRequiredField)
+							if secret.ID == 0 {
+								return fmt.Errorf("file: %w", ErrRequiredField)
+							}
 						} else {
 							_, origName := path.Split(secret.Data.FilePath.Path)
 							secret.Data.FilePath.OrigName = origName
