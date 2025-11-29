@@ -143,11 +143,11 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 	switch secret.Type {
 	case models.SecretTypeFile:
 		// for edit secret, when file not change
-		if secret.Data.FilePath == "" {
+		if secret.Data.FilePath.Path == "" {
 			break
 		}
 
-		cryptName, err := app.CopyFileToLocalStorage(secret.Data.FilePath, secret.Data.OldFilePath)
+		cryptName, err := app.CopyFileToLocalStorage(secret.Data.FilePath.Path, secret.Data.FilePath.OldPath)
 		if err != nil {
 			return err
 		}
@@ -184,8 +184,8 @@ func (app *ClientApp) transformDBToData(secret *models.Secret, secretDB *models.
 	switch secret.Type {
 	case models.SecretTypeFile:
 		// в базе пути хранятся относительно DataDir
-		secret.Data.FilePath = path.Join(app.config.DataDir(), secretDB.FilePath)
-		secret.Data.OldFilePath = secret.Data.FilePath
+		secret.Data.FilePath.Path = path.Join(app.config.DataDir(), secretDB.FilePath)
+		secret.Data.FilePath.OldPath = secret.Data.FilePath.Path
 	case models.SecretTypeText:
 		secret.Data.Text = string(secretDB.Data)
 	default:

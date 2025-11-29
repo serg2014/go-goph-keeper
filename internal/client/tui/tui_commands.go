@@ -64,8 +64,8 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 		return err
 	}
 
-	if secret.Data.TmpFilePath != "" {
-		os.Remove(secret.Data.TmpFilePath)
+	if secret.Data.FilePath.TmpPath != "" {
+		os.Remove(secret.Data.FilePath.TmpPath)
 	}
 	if save {
 		err = app.UpdateSecret(ctx, secret)
@@ -73,7 +73,7 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 			return err
 		}
 	} else if form.GetBool("delete") {
-		err = app.DeleteSecret(ctx, secret.ID, secret.Data.OldFilePath)
+		err = app.DeleteSecret(ctx, secret.ID, secret.Data.FilePath.OldPath)
 		if err != nil {
 			return err
 		}

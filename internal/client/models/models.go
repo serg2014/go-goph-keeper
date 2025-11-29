@@ -54,16 +54,22 @@ func (m *Meta) PrettyString() (string, error) {
 }
 
 const (
-	MetaKeyName = "__name__"
+	MetaKeyName     = "__name__"
+	MetaKeyInternal = "__internal__"
 )
 
 type Data struct {
 	LoginPassword *LoginPassword `json:"login_password,omitempty"`
 	CreditCard    *CreditCard    `json:"credit_card,omitempty"`
 	Text          string         `json:"-"`
-	FilePath      string         `json:"-"`
-	OldFilePath   string         `json:"-"`
-	TmpFilePath   string         `json:"-"`
+	FilePath      FilePath       `json:"-"`
+}
+
+type FilePath struct {
+	Path     string
+	OldPath  string
+	TmpPath  string
+	OrigName string
 }
 
 type LoginPassword struct {

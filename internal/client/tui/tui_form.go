@@ -179,7 +179,7 @@ func tuiFormText(secret *models.Secret, save *bool) *huh.Form {
 
 func tuiFormFile(secret *models.Secret, save *bool, fn func(string) (string, error)) *huh.Form {
 	var size int
-	cryptPath := secret.Data.FilePath
+	cryptPath := secret.Data.FilePath.Path
 	if cryptPath != "" {
 		info, err := os.Stat(cryptPath)
 		if err == nil {
@@ -187,7 +187,7 @@ func tuiFormFile(secret *models.Secret, save *bool, fn func(string) (string, err
 		}
 
 	}
-	secret.Data.FilePath = ""
+	secret.Data.FilePath.Path = ""
 	opts := []huh.Field{
 		huh.NewFilePicker().
 			ShowHidden(true). // do not work
@@ -195,7 +195,7 @@ func tuiFormFile(secret *models.Secret, save *bool, fn func(string) (string, err
 			Key("File").
 			Title("File").
 			Description(fmt.Sprintf("Max file size is %dM", MaxFileSize/1024/1024)).
-			Value(&secret.Data.FilePath),
+			Value(&secret.Data.FilePath.Path),
 	}
 	if size != 0 {
 		var show bool
@@ -213,7 +213,7 @@ func tuiFormFile(secret *models.Secret, save *bool, fn func(string) (string, err
 						if err != nil {
 							return err
 						}
-						secret.Data.TmpFilePath = decryptPath
+						secret.Data.FilePath.TmpPath = decryptPath
 						desc += fmt.Sprintf("\nFile in %s\n", decryptPath)
 						// сбросить нажатие кнопки
 						show = false
@@ -248,10 +248,10 @@ func tuiFormHelper(secret *models.Secret, save *bool, opts []huh.Field) *huh.For
 			Validate(func(b bool) error {
 				if b {
 					if secret.Type == models.SecretTypeFile && secret.ID == 0 {
-						if secret.Data.FilePath == "" {
+						if secret.Data.FilePath.Path == "" {
 							return fmt.Errorf("file: %w", ErrRequiredField)
 						} else {
-							info, err := os.Stat(secret.Data.FilePath)
+							info, err := os.Stat(secret.Data.FilePath.Path)
 							if err != nil {
 								return err
 							}
