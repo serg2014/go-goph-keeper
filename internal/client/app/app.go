@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
@@ -214,24 +213,24 @@ func (app *ClientApp) syncCreateSecret(ctx context.Context) error {
 		return fmt.Errorf("grpc CreateSecrets: %v", err)
 	}
 
-	waitResponse := make(chan error)
-	// go routine to receive responses
-	go func() {
-		for {
-			res, err := stream.Recv()
-			if err == io.EOF {
-				logger.Logger.Debug("no more responses")
-				waitResponse <- nil
-				return
-			}
-			if err != nil {
-				waitResponse <- fmt.Errorf("cannot receive stream response: %v", err)
-				return
-			}
+	// waitResponse := make(chan error)
+	// // go routine to receive responses
+	// go func() {
+	// 	for {
+	// 		res, err := stream.Recv()
+	// 		if err == io.EOF {
+	// 			logger.RPCLogger.Debug("no more responses")
+	// 			waitResponse <- nil
+	// 			return
+	// 		}
+	// 		if err != nil {
+	// 			waitResponse <- fmt.Errorf("cannot receive stream response: %v", err)
+	// 			return
+	// 		}
 
-			logger.Logger.Debug("received response", slog.Uint64("server_id", res.Secret.ServerId))
-		}
-	}()
+	// 		logger.RPCLogger.Debug(fmt.Sprintf("received response: %v", res))
+	// 	}
+	// }()
 
 	// 	message SecretData {
 	//     int64 id = 1;
@@ -245,28 +244,54 @@ func (app *ClientApp) syncCreateSecret(ctx context.Context) error {
 	//     SecretData data = 3;
 
 	// send requests
-	for i := range 11 {
-		if i == 0 {
-			continue
-		}
-		req := &pb.CreateSecretRequest{
-			Secret: &pb.Secret{
-				Id: int64(-1 * i),
-				Meta: &pb.SecretData{
-					Id:        int64(-1 * i),
-					UpdatedAt: 100,
-					Data:      []byte("ssss"),
+	for range 2 {
+		var err error
+		for i := range 11 {
+			if i == 0 {
+				continue
+			}
+			req := &pb.CreateSecretRequest{
+				Secret: &pb.Secret{
+					Id: int64(-1 * i),
+					Meta: &pb.SecretData{
+						Id:        int64(-1 * i),
+						UpdatedAt: 100,
+						Data:      []byte("ssss"),
+					},
 				},
-			},
+			}
+
+			err = stream.Send(req)
+			if err != nil {
+				logger.RPCLogger.Debug(fmt.Sprintf("Send get error: %v", err))
+				if errors.Is(err, auth.ErrNeedRetry) {
+					break
+				}
+				// return fmt.Errorf("cannot send stream request: %v - %v", err, stream.RecvMsg(nil))
+				return fmt.Errorf("cannot send stream request: %v", err)
+			}
+
+			//
+			var res *pb.CreateSecretResponse
+			res, err = stream.Recv()
+			if err != nil {
+				logger.RPCLogger.Debug(fmt.Sprintf("Recv get error: %v", err))
+			}
+			if err == io.EOF {
+				logger.RPCLogger.Debug("no more responses")
+			}
+			if errors.Is(err, auth.ErrNeedRetry) {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("cannot receive stream response: %v", err)
+			}
+			logger.RPCLogger.Debug(fmt.Sprintf("received response: %v", res))
+
 		}
-
-		err := stream.Send(req)
-		if err != nil {
-			return fmt.Errorf("cannot send stream request: %v - %v", err, stream.RecvMsg(nil))
+		if err == nil {
+			break
 		}
-
-		logger.Logger.Debug("sent request", slog.String("req", fmt.Sprintf("%v", req)))
-
 	}
 
 	err = stream.CloseSend()
@@ -274,6 +299,7 @@ func (app *ClientApp) syncCreateSecret(ctx context.Context) error {
 		return fmt.Errorf("cannot close send: %v", err)
 	}
 
-	err = <-waitResponse
-	return err
+	return nil
+	// err = <-waitResponse
+	// return err
 }

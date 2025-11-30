@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -11,6 +12,10 @@ import (
 const (
 	authHeader = "authorization"
 	authType   = "bearer"
+)
+
+var (
+	ErrNeedRetry = errors.New("need retry")
 )
 
 type AuthManager struct {
