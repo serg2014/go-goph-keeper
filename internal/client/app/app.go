@@ -3,29 +3,37 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"log/slog"
 	"os"
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
+	"github.com/serg2014/go-goph-keeper/internal/client/auth"
 	"github.com/serg2014/go-goph-keeper/internal/client/config"
+	"github.com/serg2014/go-goph-keeper/internal/client/logger"
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
 	"github.com/serg2014/go-goph-keeper/internal/client/storage"
 )
 
-type ClientApp struct {
-	store    storage.Storager
-	config   *config.Config
-	grpcAuth pb.AuthServiceClient
-	grpcKeep pb.GophKeeperServiceClient
-	tokens   tokens
-}
+var (
+	ErrEmptyRefreshToken = errors.New("empty refresh token")
+)
 
-type tokens struct {
-	auth    string
-	refresh string
+type ClientApp struct {
+	store       storage.Storager
+	config      *config.Config
+	grpcAuth    pb.AuthServiceClient
+	grpcKeep    pb.GophKeeperServiceClient
+	authManager *auth.AuthManager
 }
 
 func NewApp(store storage.Storager, config *config.Config) *ClientApp {
-	return &ClientApp{store: store, config: config}
+	return &ClientApp{
+		store:       store,
+		config:      config,
+		authManager: auth.NewAuthManager(),
+	}
 }
 
 func (app *ClientApp) SetAuthClient(authClient pb.AuthServiceClient) {
@@ -106,12 +114,6 @@ func (app *ClientApp) DeleteSecret(ctx context.Context, id int, filePath string)
 	return nil
 }
 
-func (app *ClientApp) saveTokens(auth, refresh string) {
-	app.tokens = tokens{
-		auth:    auth,
-		refresh: refresh,
-	}
-}
 func (app *ClientApp) RegisterUser(ctx context.Context, login, password string) error {
 	resp, err := app.grpcAuth.RegisterUser(ctx, &pb.RegisterUserRequest{
 		Login:    login,
@@ -121,7 +123,7 @@ func (app *ClientApp) RegisterUser(ctx context.Context, login, password string) 
 		return err
 	}
 
-	app.saveTokens(resp.Access.Token, resp.Refresh.Token)
+	app.authManager.SaveTokens(resp.Access.Token, resp.Refresh.Token)
 	return nil
 }
 
@@ -134,17 +136,27 @@ func (app *ClientApp) AuthUser(ctx context.Context, login, password string) erro
 		return err
 	}
 
-	app.saveTokens(resp.Access.Token, resp.Refresh.Token)
+	app.authManager.SaveTokens(resp.Access.Token, resp.Refresh.Token)
 	return nil
 }
 
-func (app *ClientApp) RenewAuth(ctx context.Context) error {
+func (app *ClientApp) RenewAuth(ctx context.Context) (context.Context, error) {
+	// получаем refresh токен
+	refresh := app.GetRefreshToken()
+	if refresh == "" {
+		return nil, ErrEmptyRefreshToken
+	}
+	// используем refresh токен для получения access токена
+	ctx = app.authManager.AddAuthTokenToMeta(ctx, refresh)
+	// пробуем обновить токен
 	resp, err := app.grpcAuth.RenewAuth(ctx, &pb.RenewAuthRequest{})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	app.saveTokens(resp.Access.Token, resp.Refresh.Token)
-	return nil
+	app.authManager.SaveTokens(resp.Access.Token, resp.Refresh.Token)
+	// выставить в мета новый auth токен
+	ctx = auth.AddAuthTokenToMeta(ctx, resp.Access.Token)
+	return ctx, nil
 }
 
 func (app *ClientApp) Ping(ctx context.Context) error {
@@ -153,11 +165,11 @@ func (app *ClientApp) Ping(ctx context.Context) error {
 }
 
 func (app *ClientApp) GetAuthToken() string {
-	return app.tokens.auth
+	return app.authManager.GetAuthToken()
 }
 
 func (app *ClientApp) GetRefreshToken() string {
-	return app.tokens.refresh
+	return app.authManager.GetRefreshToken()
 }
 
 type SyncStatus struct {
@@ -182,7 +194,7 @@ type ConflictedID struct {
 	RemoteID int
 }
 
-func (app *ClientApp) Sync() (*SyncStatus, error) {
+func (app *ClientApp) Sync(ctx context.Context) error {
 	/*
 		1. Удаляем секреты на сервере по записям из таблицы deleted
 		2. Создаем секреты на сервере (все записи с отрицательными ключами)
@@ -191,5 +203,77 @@ func (app *ClientApp) Sync() (*SyncStatus, error) {
 		5. Удаляем секреты локально
 		6. Создаем секреты локально
 	*/
-	return nil, errors.New("not implemented")
+	return app.syncCreateSecret(ctx)
+	//return errors.New("not implemented")
+}
+
+func (app *ClientApp) syncCreateSecret(ctx context.Context) error {
+	// CreateSecrets(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[CreateSecretsRequest, CreateSecretsResponse], error)
+	stream, err := app.grpcKeep.CreateSecrets(ctx)
+	if err != nil {
+		return fmt.Errorf("grpc CreateSecrets: %v", err)
+	}
+
+	waitResponse := make(chan error)
+	// go routine to receive responses
+	go func() {
+		for {
+			res, err := stream.Recv()
+			if err == io.EOF {
+				logger.Logger.Debug("no more responses")
+				waitResponse <- nil
+				return
+			}
+			if err != nil {
+				waitResponse <- fmt.Errorf("cannot receive stream response: %v", err)
+				return
+			}
+
+			logger.Logger.Debug("received response", slog.Uint64("server_id", res.Secret.ServerId))
+		}
+	}()
+
+	// 	message SecretData {
+	//     int64 id = 1;
+	//     int64 version = 2;
+	//     int64 updated_at = 3;
+	//     bytes data = 4;
+	// }
+	// message Secret {
+	//     int64 id = 1;
+	//     SecretData meta = 2;
+	//     SecretData data = 3;
+
+	// send requests
+	for i := range 11 {
+		if i == 0 {
+			continue
+		}
+		req := &pb.CreateSecretRequest{
+			Secret: &pb.Secret{
+				Id: int64(-1 * i),
+				Meta: &pb.SecretData{
+					Id:        int64(-1 * i),
+					UpdatedAt: 100,
+					Data:      []byte("ssss"),
+				},
+			},
+		}
+
+		err := stream.Send(req)
+		if err != nil {
+			return fmt.Errorf("cannot send stream request: %v - %v", err, stream.RecvMsg(nil))
+		}
+
+		logger.Logger.Debug("sent request", slog.String("req", fmt.Sprintf("%v", req)))
+
+	}
+
+	err = stream.CloseSend()
+	if err != nil {
+		return fmt.Errorf("cannot close send: %v", err)
+	}
+
+	err = <-waitResponse
+	return err
 }

@@ -14,15 +14,12 @@ import (
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/client/app"
-	"github.com/serg2014/go-goph-keeper/internal/client/auth"
 	"github.com/serg2014/go-goph-keeper/internal/client/config"
 	"github.com/serg2014/go-goph-keeper/internal/client/logger"
 	"github.com/serg2014/go-goph-keeper/internal/client/storage"
 	"github.com/serg2014/go-goph-keeper/internal/client/tui"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/status"
 )
 
 var (
@@ -58,7 +55,7 @@ func run() error {
 	defer cleanWorkSpace(conf)
 
 	// Setup logging.
-	err = logger.Init(conf.LogDir())
+	err = logger.Init(conf.LogDir(), strings.ToLower(conf.LogLevel))
 	if err != nil {
 		return err
 	}
@@ -90,6 +87,7 @@ func run() error {
 		),
 		grpc.WithChainStreamInterceptor(
 			logging.StreamClientInterceptor(interceptorLogger(logger.RPCLogger)),
+			authClientStreamInterceptor(app),
 		),
 	)
 	if err != nil {
@@ -116,49 +114,6 @@ func generateTLSCreds() (credentials.TransportCredentials, error) {
 	certFile := "server.crt"
 
 	return credentials.NewClientTLSFromFile(certFile, "")
-}
-
-type clientIterceptor = func(ctx context.Context, method string, req interface{},
-	reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker,
-	opts ...grpc.CallOption) error
-
-func authClientInterceptor(app *app.ClientApp) clientIterceptor {
-	return func(ctx context.Context, method string, req interface{},
-		reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker,
-		opts ...grpc.CallOption) error {
-		// выполняем действия перед вызовом метода
-		// получить auth token и выставить мета
-		if strings.HasPrefix(method, "/gophkeeper.GophKeeperService/") {
-			ctx = auth.AddAuthTokenToMeta(ctx, app.GetAuthToken())
-		}
-		// вызываем RPC-метод
-		err := invoker(ctx, method, req, reply, cc, opts...)
-
-		// выполняем действия после вызова метода
-		if err != nil && method != "/gophkeeper.AuthService/RenewAuth" {
-			if e, ok := status.FromError(err); ok {
-				switch e.Code() {
-				case codes.Unauthenticated:
-					// пробуем обновить токен
-					refresh := app.GetRefreshToken()
-					if refresh == "" {
-						return err
-					}
-
-					ctx = auth.AddAuthTokenToMeta(ctx, refresh)
-					err := app.RenewAuth(ctx)
-					if err != nil {
-						return err
-					}
-					// получить auth token и выставить мета
-					ctx = auth.AddAuthTokenToMeta(ctx, app.GetAuthToken())
-					// вызываем повторно RPC-метод
-					return invoker(ctx, method, req, reply, cc, opts...)
-				}
-			}
-		}
-		return err
-	}
 }
 
 func initWorkSpace(c *config.Config) error {

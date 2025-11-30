@@ -16,10 +16,9 @@ type SyncMenuType int
 
 const (
 	SyncMenuTypeSyncRealTime SyncMenuType = iota
-	SyncMenuTypeSyncBackgroud
-	SyncMenuTypeStatus
 	SyncMenuTypeRegister
 	SyncMenuTypeAuth
+	SyncMenuTypeTest
 	SyncMenuTypeMax // Must be last
 )
 
@@ -31,10 +30,8 @@ func (s SyncMenuType) String() string {
 		return "auth on remote server"
 	case SyncMenuTypeSyncRealTime:
 		return "sync real time"
-	case SyncMenuTypeSyncBackgroud:
-		return "sync backgroud"
-	case SyncMenuTypeStatus:
-		return "status"
+	case SyncMenuTypeTest:
+		return "test uniry rpc Ping call"
 	default:
 		return ""
 	}
@@ -102,20 +99,15 @@ func tuiSyncForm(ctx context.Context, app *app.ClientApp, selectedMenu SyncMenuT
 		}
 	case SyncMenuTypeSyncRealTime:
 		desc := "ok"
-		err := app.Ping(ctx)
+		err := app.Sync(ctx)
 		if err != nil {
 			desc = err.Error()
 		}
 		form := tuiFormSyncRealTime(desc)
 		err = form.Run()
 		return err
-	case SyncMenuTypeStatus:
-		// TODO
-		form := tuiFormSyncStatus("status")
-		err := form.Run()
-		if err != nil {
-			return err
-		}
+	case SyncMenuTypeTest:
+		return app.Ping(ctx)
 	default:
 		return ErrSyncMenuType
 	}
@@ -161,16 +153,6 @@ func tuiFormSynAuth() *huh.Form {
 				Key("password").
 				EchoMode(huh.EchoModePassword).
 				Validate(validateNotEmptyString),
-		),
-	)
-}
-
-func tuiFormSyncStatus(desc string) *huh.Form {
-	return huh.NewForm(
-		huh.NewGroup(
-			huh.NewNote().
-				Title("Status").
-				Description(desc),
 		),
 	)
 }
