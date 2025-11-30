@@ -65,7 +65,7 @@ func run() error {
 	}
 
 	// Setup logging.
-	logger.Init()
+	logger.Init(conf.LogLevel)
 
 	ctx := context.Background()
 	storage, err := database.NewStorageDB(ctx, conf.DatabaseDSN)
@@ -107,14 +107,6 @@ func run() error {
 	}
 	// Setup auth matcher.
 	authMatcherKeeper := func(ctx context.Context, callMeta interceptors.CallMeta) bool {
-		// logger.Logger.Info(
-		// 	callMeta.Service,
-		// 	slog.String("method", callMeta.Method),
-		// 	slog.String("fullmethod", callMeta.FullMethod()),
-		// 	slog.String("pb service", pb.GophKeeperService_ServiceDesc.ServiceName),
-		// 	slog.String("pb method", pb.GophKeeperService_Ping_FullMethodName),
-		// )
-
 		return pb.GophKeeperService_ServiceDesc.ServiceName == callMeta.Service
 	}
 
@@ -131,6 +123,7 @@ func run() error {
 			}
 			return nil, status.Error(codes.Unauthenticated, "invalid auth token")
 		}
+		// save userID in context
 		return auth.WithUser(ctx, userID), nil
 	}
 	// Setup auth matcher.
