@@ -150,6 +150,11 @@ func run() error {
 			selector.UnaryServerInterceptor(authinterceptors.UnaryServerInterceptor(authRefreshFn), selector.MatchFunc(refreshMatcher)),
 			recovery.UnaryServerInterceptor(recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
+		grpc.ChainStreamInterceptor(
+			logging.StreamServerInterceptor(interceptorLogger(logger.RPCLogger)),
+			selector.StreamServerInterceptor(authinterceptors.StreamServerInterceptor(authFn), selector.MatchFunc(authMatcherKeeper)),
+			recovery.StreamServerInterceptor(recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
+		),
 	)
 	// регистрируем сервисы
 	grpcs := &GrpcServer{app: app}
