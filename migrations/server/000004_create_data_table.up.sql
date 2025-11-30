@@ -6,4 +6,4 @@ CREATE TABLE IF NOT EXISTS data (
     updated_at integer NOT NULL,
     data bytea NOT NULL
 );
-CREATE UNIQUE INDEX data_user_id_secret_id_idx ON data USING btree (user_id, secret_id);
+CREATE UNIQUE INDEX IF NOT EXISTS data_user_id_secret_id_idx ON data USING btree (user_id, secret_id);

@@ -6,4 +6,4 @@ CREATE TABLE IF NOT EXISTS meta (
     updated_at integer NOT NULL,
     data bytea NOT NULL
 );
-CREATE UNIQUE INDEX meta_user_id_secret_id_idx ON meta USING btree (user_id, secret_id);
+CREATE UNIQUE INDEX IF NOT EXISTS meta_user_id_secret_id_idx ON meta USING btree (user_id, secret_id);
