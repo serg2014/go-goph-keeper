@@ -204,6 +204,8 @@ func (s *storageDB) UpdateSecret(ctx context.Context, userID models.UserID, req 
 		row := tx.QueryRowContext(ctx, query, req.Secret.Meta.Id, userID)
 		err := row.Scan(&res.Secret.Meta.Version)
 		if err != nil {
+			// TODO сюда попадаем когда секрет на сервере был удален, а локально изменен
+			// либо нам прислали кривой секрет(попытка взлома)
 			return nil, fmt.Errorf("failed select for update meta: %w", err)
 		}
 
