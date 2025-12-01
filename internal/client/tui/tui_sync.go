@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/huh"
 	"github.com/serg2014/go-goph-keeper/internal/client/app"
@@ -98,14 +100,16 @@ func tuiSyncForm(ctx context.Context, app *app.ClientApp, selectedMenu SyncMenuT
 			return err
 		}
 	case SyncMenuTypeSyncRealTime:
-		desc := "ok"
-		err := app.Sync(ctx)
-		if err != nil {
-			desc = err.Error()
+		syncStatus, errs := app.Sync(ctx)
+		errStr := strings.Builder{}
+		for _, err := range errs {
+			if err != nil {
+				errStr.WriteString(err.Error())
+				errStr.WriteString("\n")
+			}
 		}
-		form := tuiFormSyncRealTime(desc)
-		err = form.Run()
-		return err
+		form := tuiFormSyncRealTime(syncStatus, errStr.String())
+		return form.Run()
 	case SyncMenuTypeTest:
 		return app.Ping(ctx)
 	default:
@@ -157,12 +161,63 @@ func tuiFormSynAuth() *huh.Form {
 	)
 }
 
-func tuiFormSyncRealTime(desc string) *huh.Form {
+func tuiFormSyncRealTime(syncStatus *app.SyncStatus, errString string) *huh.Form {
+	desc := "ok"
+	if errString != "" {
+		desc = errString
+	}
+
+	conflicted := ""
+	conflictedBuilder := strings.Builder{}
+	for _, item := range syncStatus.Conflicted {
+		conflictedBuilder.WriteString(fmt.Sprintf("Secret id: %d\n", item.SecretID))
+		if item.Meta != nil {
+			conflictedBuilder.WriteString("Meta:\n")
+			conflictedBuilder.WriteString(fmt.Sprintf("  localVersion: %d\n", item.Meta.LocalVersion))
+			conflictedBuilder.WriteString(fmt.Sprintf("  remoreVersion: %d\n", item.Meta.RemoteVersion))
+		}
+		if item.Data != nil {
+			conflictedBuilder.WriteString("Data:\n")
+			conflictedBuilder.WriteString(fmt.Sprintf("  localVersion: %d\n", item.Data.LocalVersion))
+			conflictedBuilder.WriteString(fmt.Sprintf("  remoreVersion: %d\n", item.Data.RemoteVersion))
+		}
+	}
+	if conflictedBuilder.Len() != 0 {
+		conflicted = conflictedBuilder.String()
+	}
+
 	return huh.NewForm(
 		huh.NewGroup(
 			huh.NewNote().
 				Title("Realtime sync").
 				Description(desc),
 		),
+		huh.NewGroup(
+			huh.NewNote().
+				Title("Remote").
+				Description(fmt.Sprintf(
+					"Added: %d\nUpdated: %d\nDeleted: %d",
+					syncStatus.Remote.Added,
+					syncStatus.Remote.Updated,
+					syncStatus.Remote.Deleted,
+				)),
+		),
+		huh.NewGroup(
+			huh.NewNote().
+				Title("Local").
+				Description(fmt.Sprintf(
+					"Added: %d\nUpdated: %d\nDeleted: %d",
+					syncStatus.Local.Added,
+					syncStatus.Local.Updated,
+					syncStatus.Local.Deleted,
+				)),
+		),
+		huh.NewGroup(
+			huh.NewNote().
+				Title("Conflicted").
+				Description(conflicted),
+		).WithHideFunc(func() bool {
+			return len(syncStatus.Conflicted) == 0
+		}),
 	)
 }

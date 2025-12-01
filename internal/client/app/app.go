@@ -3,16 +3,17 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io"
 	"os"
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/client/auth"
 	"github.com/serg2014/go-goph-keeper/internal/client/config"
-	"github.com/serg2014/go-goph-keeper/internal/client/logger"
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
 	"github.com/serg2014/go-goph-keeper/internal/client/storage"
+)
+
+const (
+	maxRetries = 2
 )
 
 var (
@@ -87,7 +88,7 @@ func (app *ClientApp) SecretsList(ctx context.Context) ([]models.Secret, error) 
 	return secrets, nil
 }
 
-func (app *ClientApp) GetSecret(ctx context.Context, id int) (*models.Secret, error) {
+func (app *ClientApp) GetSecret(ctx context.Context, id int64) (*models.Secret, error) {
 	secretDB, err := app.store.GetSecret(ctx, id)
 	if err != nil {
 		return nil, err
@@ -101,7 +102,7 @@ func (app *ClientApp) GetSecret(ctx context.Context, id int) (*models.Secret, er
 	return secret, nil
 }
 
-func (app *ClientApp) DeleteSecret(ctx context.Context, id int, filePath string) error {
+func (app *ClientApp) DeleteSecret(ctx context.Context, id int64, filePath string) error {
 	err := app.store.DeleteSecret(ctx, id)
 	if err != nil {
 		return err
@@ -169,137 +170,4 @@ func (app *ClientApp) GetAuthToken() string {
 
 func (app *ClientApp) GetRefreshToken() string {
 	return app.authManager.GetRefreshToken()
-}
-
-type SyncStatus struct {
-	Remote     Status
-	Local      Status
-	Conflicted []Conflicted
-}
-
-type Status struct {
-	Added   int
-	Updated int
-	Deleted int
-}
-
-type Conflicted struct {
-	Meta ConflictedID
-	Data ConflictedID
-}
-
-type ConflictedID struct {
-	LocalID  int
-	RemoteID int
-}
-
-func (app *ClientApp) Sync(ctx context.Context) error {
-	/*
-		1. Удаляем секреты на сервере по записям из таблицы deleted
-		2. Создаем секреты на сервере (все записи с отрицательными ключами)
-		3. Обновляем секреты на сервере
-		4. Обновляем секреты локально
-		5. Удаляем секреты локально
-		6. Создаем секреты локально
-	*/
-	return app.syncCreateSecret(ctx)
-	//return errors.New("not implemented")
-}
-
-func (app *ClientApp) syncCreateSecret(ctx context.Context) error {
-	// CreateSecrets(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[CreateSecretsRequest, CreateSecretsResponse], error)
-	stream, err := app.grpcKeep.CreateSecrets(ctx)
-	if err != nil {
-		return fmt.Errorf("grpc CreateSecrets: %v", err)
-	}
-
-	// waitResponse := make(chan error)
-	// // go routine to receive responses
-	// go func() {
-	// 	for {
-	// 		res, err := stream.Recv()
-	// 		if err == io.EOF {
-	// 			logger.RPCLogger.Debug("no more responses")
-	// 			waitResponse <- nil
-	// 			return
-	// 		}
-	// 		if err != nil {
-	// 			waitResponse <- fmt.Errorf("cannot receive stream response: %v", err)
-	// 			return
-	// 		}
-
-	// 		logger.RPCLogger.Debug(fmt.Sprintf("received response: %v", res))
-	// 	}
-	// }()
-
-	// 	message SecretData {
-	//     int64 id = 1;
-	//     int64 version = 2;
-	//     int64 updated_at = 3;
-	//     bytes data = 4;
-	// }
-	// message Secret {
-	//     int64 id = 1;
-	//     SecretData meta = 2;
-	//     SecretData data = 3;
-
-	// send requests
-	for range 2 {
-		var err error
-		for i := range 11 {
-			if i == 0 {
-				continue
-			}
-			req := &pb.CreateSecretRequest{
-				Secret: &pb.Secret{
-					Id: int64(-1 * i),
-					Meta: &pb.SecretData{
-						Id:        int64(-1 * i),
-						UpdatedAt: 100,
-						Data:      []byte("ssss"),
-					},
-				},
-			}
-
-			err = stream.Send(req)
-			if err != nil {
-				logger.RPCLogger.Debug(fmt.Sprintf("Send get error: %v", err))
-				if errors.Is(err, auth.ErrNeedRetry) {
-					break
-				}
-				// return fmt.Errorf("cannot send stream request: %v - %v", err, stream.RecvMsg(nil))
-				return fmt.Errorf("cannot send stream request: %v", err)
-			}
-
-			//
-			var res *pb.CreateSecretResponse
-			res, err = stream.Recv()
-			if err != nil {
-				logger.RPCLogger.Debug(fmt.Sprintf("Recv get error: %v", err))
-			}
-			if err == io.EOF {
-				logger.RPCLogger.Debug("no more responses")
-			}
-			if errors.Is(err, auth.ErrNeedRetry) {
-				break
-			}
-			if err != nil {
-				return fmt.Errorf("cannot receive stream response: %v", err)
-			}
-			logger.RPCLogger.Debug(fmt.Sprintf("received response: %v", res))
-
-		}
-		if err == nil {
-			break
-		}
-	}
-
-	err = stream.CloseSend()
-	if err != nil {
-		return fmt.Errorf("cannot close send: %v", err)
-	}
-
-	return nil
-	// err = <-waitResponse
-	// return err
 }

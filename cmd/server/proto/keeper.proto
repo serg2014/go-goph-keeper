@@ -54,20 +54,48 @@ message CreateSecretRequest{
 
 message SecretDataLite {
     int64 id = 1;
-    uint64 server_id = 2;
-    uint64 version = 3;
+    int64 server_id = 2;
 }
 message SecretLite {
-    int64 id = 1;
-    uint64 server_id = 2;
-    SecretDataLite meta = 3;
-    SecretDataLite data = 4;
+    SecretDataLite secret = 1;
+    SecretDataLite meta = 2;
+    SecretDataLite data = 3;
 }
 message CreateSecretResponse{
     SecretLite secret = 1;
 }
 
+message SecretDataUpdate {
+    int64 id = 1;
+    int64 updated_at = 2;
+    int64 version = 3;
+    bytes data = 4;  
+}
+message SecretUpdate {
+    int64 id = 1;
+    SecretDataUpdate meta = 2;
+    SecretDataUpdate data = 3;
+}
+message UpdateSecretRequest {
+    SecretUpdate secret = 1;
+}
+
+message SecretDataLiteUpdate {
+    int64 id = 1;
+    int64 version = 2;
+    bool conflict = 3;
+}
+message SecretLiteUpdate {
+    int64 id = 1;
+    SecretDataLiteUpdate meta = 2;
+    SecretDataLiteUpdate data = 3;
+}
+message UpdateSecretResponse {
+    SecretLiteUpdate secret = 1;
+}
+
 service GophKeeperService {
     rpc Ping(PingRequest) returns (PingResponse);
     rpc CreateSecrets(stream CreateSecretRequest) returns (stream CreateSecretResponse);
+    rpc UpdateSecrets(stream UpdateSecretRequest) returns (stream UpdateSecretResponse);
 }

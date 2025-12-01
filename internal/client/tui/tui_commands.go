@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -28,6 +29,7 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 	opts := make([]huh.Option[*models.Secret], 0, len(secrets))
 	for _, item := range secrets {
 		b := strings.Builder{}
+		b.WriteString(fmt.Sprintf("%d ", item.ID))
 		b.WriteString(item.Meta.InternalMeta.SecretName)
 		b.WriteString(" ")
 		b.WriteString(item.Type.String())

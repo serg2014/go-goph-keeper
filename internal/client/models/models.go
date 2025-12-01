@@ -3,14 +3,14 @@ package models
 import "encoding/json"
 
 type SecretDB struct {
-	ID   int
+	ID   int64
 	Type SecretType
 	Meta []byte
 	Data []byte
 }
 
 type Secret struct {
-	ID   int
+	ID   int64
 	Type SecretType
 	// Name string
 	Meta BlockMeta
