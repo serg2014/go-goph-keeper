@@ -549,6 +549,101 @@ func (s *storageDB) UpdateSecretAfterDelete(ctx context.Context, resp *pb.Delete
 	return tx.Commit()
 }
 
+func (s *storageDB) SecretsListInfo(ctx context.Context) (models.SecretListInfo, error) {
+	query := `SELECT m.secret_id, m.version as meta_version, d.version as data_version
+	FROM meta as m
+	JOIN data as d ON d.secret_id = m.secret_id`
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	// обязательно закрываем перед возвратом функции
+	defer rows.Close()
+
+	info := make(models.SecretListInfo)
+	for rows.Next() {
+		var item pb.SecretsListResponse
+		err = rows.Scan(&item.Id, &item.MetaVersion, &item.DataVersion)
+		if err != nil {
+			return nil, err
+		}
+		info[item.Id] = &item
+	}
+	// проверяем на ошибки
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+func (s *storageDB) ForceDelete(ctx context.Context, deleteIDs []string) error {
+	// начинаем транзакцию
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `DELETE FROM secrets WHERE id=?`
+	stmt0, err := tx.PrepareContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	defer stmt0.Close()
+
+	for i := range deleteIDs {
+		_, err := stmt0.ExecContext(ctx, deleteIDs[i])
+		if err != nil {
+			return err
+		}
+	}
+
+	query = `DELETE FROM meta WHERE secret_id=?`
+	stmt1, err := tx.PrepareContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	defer stmt1.Close()
+
+	for i := range deleteIDs {
+		_, err := stmt1.ExecContext(ctx, deleteIDs[i])
+		if err != nil {
+			return err
+		}
+	}
+
+	query = `DELETE FROM data WHERE secret_id=?`
+	stmt2, err := tx.PrepareContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	defer stmt2.Close()
+
+	for i := range deleteIDs {
+		_, err := stmt2.ExecContext(ctx, deleteIDs[i])
+		if err != nil {
+			return err
+		}
+	}
+
+	query = `DELETE FROM actions WHERE secret_id=?`
+	stmt3, err := tx.PrepareContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	defer stmt3.Close()
+
+	for i := range deleteIDs {
+		_, err := stmt3.ExecContext(ctx, deleteIDs[i])
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
 // func (s *storageDB) GetSecretsForCreate(ctx context.Context) ([]*models.SecretDBCreateServer, error) {
 // 	list := make([]*models.SecretDBCreateServer, 0, 10)
 // 	query := `SELECT s.id, s.type,

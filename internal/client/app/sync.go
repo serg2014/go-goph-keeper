@@ -49,6 +49,9 @@ func (app *ClientApp) Sync(ctx context.Context) (*SyncStatus, []error) {
 
 	err = app.syncDeleteSecretOnServer(ctx, syncStatus)
 	errorList = append(errorList, err)
+
+	err = app.syncFromServer(ctx, syncStatus)
+	errorList = append(errorList, err)
 	// syncStatus содержит частично обновленные данные
 	return syncStatus, errorList
 }
@@ -343,5 +346,79 @@ func (app *ClientApp) deleteSecretsWithRetry(
 	}
 
 	logger.RPCLogger.Debug(fmt.Sprintf("updateSecretsWithRetry error: %v", err))
+	return nil, err
+}
+
+func (app *ClientApp) syncFromServer(ctx context.Context, syncStatus *SyncStatus) error {
+	serverInfo, err := app.secretsListInfoWithRetry(ctx)
+	localInfo, err := app.store.SecretsListInfo(ctx)
+	if err != nil {
+		return err
+	}
+	for secret_id := range serverInfo {
+		if info, ok := localInfo[secret_id]; !ok {
+			// создаем
+			// syncStatus.Local.Added++
+		} else {
+			if serverInfo[secret_id].DataVersion != info.DataVersion ||
+				serverInfo[secret_id].MetaVersion != info.MetaVersion {
+				// обновляем
+				// syncStatus.Local.Updated++
+			}
+			delete(localInfo, secret_id)
+		}
+	}
+	// все что осталось в localInfo удаляем
+	if len(localInfo) != 0 {
+		deleteIDs := make([]string, 0, len(localInfo))
+		for secret_id := range localInfo {
+			deleteIDs = append(deleteIDs, secret_id)
+		}
+		err := app.store.ForceDelete(ctx, deleteIDs)
+		if err != nil {
+			return err
+		}
+		syncStatus.Local.Deleted += len(localInfo)
+	}
+
+	return nil
+}
+
+func (app *ClientApp) secretsListInfoWithRetry(ctx context.Context) (models.SecretListInfo, error) {
+	var err error
+	for range maxRetries {
+		var stream grpc.ServerStreamingClient[pb.SecretsListResponse]
+		// Устанавливаем соединение стрима
+		stream, err = app.grpcKeep.SecretsListInfo(ctx, &pb.SecretsListRequest{})
+		if err != nil {
+			logger.RPCLogger.Debug(fmt.Sprintf("SecretsListInfo err: %v", err))
+			return nil, err
+		}
+
+		serverInfo := make(models.SecretListInfo)
+		for {
+			var resp *pb.SecretsListResponse
+			resp, err = stream.Recv()
+			if err != nil {
+				logger.RPCLogger.Debug(fmt.Sprintf("Recv get error: %v", err))
+			}
+			if err == io.EOF {
+				logger.RPCLogger.Debug("no more responses")
+				return serverInfo, nil
+			}
+			if errors.Is(err, auth.ErrNeedRetry) {
+				break // переходим к следующей попытке
+			}
+			if err != nil {
+				return nil, fmt.Errorf("cannot receive stream response: %v", err)
+			}
+			serverInfo[resp.Id] = resp
+		}
+		if err == nil {
+			return serverInfo, nil
+		}
+	}
+
+	logger.RPCLogger.Debug(fmt.Sprintf("secretsListInfoWithRetry error: %v", err))
 	return nil, err
 }

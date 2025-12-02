@@ -1,6 +1,9 @@
 package models
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
+)
 
 type SecretDBCreateServer struct {
 	ID          uuid.UUID
@@ -29,3 +32,5 @@ type SecretDBDeleteServer struct {
 	MetaVersion int64
 	DataVersion int64
 }
+
+type SecretListInfo map[string]*pb.SecretsListResponse

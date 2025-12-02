@@ -33,4 +33,7 @@ type Storager interface {
 	GetSecretsIDsForServerDelete(ctx context.Context) ([]uuid.UUID, error)
 	GetSecretForDelete(ctx context.Context, secret_id uuid.UUID) (*models.SecretDBDeleteServer, error)
 	UpdateSecretAfterDelete(ctx context.Context, resp *pb.DeleteSecretResponse) error
+
+	SecretsListInfo(ctx context.Context) (models.SecretListInfo, error)
+	ForceDelete(ctx context.Context, deleteIDs []string) error
 }
