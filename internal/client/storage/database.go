@@ -495,7 +495,7 @@ func (s *storageDB) GetSecretForDelete(ctx context.Context, secret_id uuid.UUID)
 	JOIN meta as m ON m.secret_id = s.id
 	JOIN data as d ON d.secret_id = s.id
 	WHERE s.id = ?`
-	row := s.db.QueryRowContext(ctx, query, DeleteAction, secret_id)
+	row := s.db.QueryRowContext(ctx, query, secret_id)
 	item := &models.SecretDBDeleteServer{}
 	err := row.Scan(&item.ID, &item.Type, &item.MetaVersion, &item.DataVersion)
 	if err != nil {
