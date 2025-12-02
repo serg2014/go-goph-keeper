@@ -372,3 +372,26 @@ func (s *storageDB) GetSecretsListInfo(ctx context.Context, userID models.UserID
 	}
 	return list, nil
 }
+
+func (s *storageDB) GetSecret(ctx context.Context, userID models.UserID, secret_id string) (*pb.GetSecretsResponse, error) {
+	query := `SELECT m.version as meta_version, m.updated_at as meta_updated_at, m.data as meta_data,
+	d.version as data_version, d.updated_at as data_updated_at, d.data as data_data
+	FROM meta as m
+	JOIN data as d ON d.secret_id=m.secret_id
+	WHERE m.user_id=$1 and m.secret_id=$2`
+	resp := &pb.GetSecretsResponse{
+		Id:   secret_id,
+		Meta: &pb.GetSecretInfo{},
+		Data: &pb.GetSecretInfo{},
+	}
+	row := s.db.QueryRowContext(ctx, query, userID, secret_id)
+	err := row.Scan(
+		&resp.Meta.Version, &resp.Meta.UpdatedAt, &resp.Meta.Data,
+		&resp.Data.Version, &resp.Data.UpdatedAt, &resp.Data.Data,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}

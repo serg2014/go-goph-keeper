@@ -62,3 +62,11 @@ func (app *MyApp) GetSecretsListInfo(ctx context.Context) ([]*pb.SecretsListResp
 	}
 	return app.store.GetSecretsListInfo(ctx, *userID)
 }
+
+func (app *MyApp) GetSecret(ctx context.Context, req *pb.GetSecretsRequest) (*pb.GetSecretsResponse, error) {
+	userID, err := auth.GetUserIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return app.store.GetSecret(ctx, *userID, req.Id)
+}

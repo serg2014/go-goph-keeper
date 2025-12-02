@@ -145,3 +145,32 @@ func (s *GrpcServer) SecretsListInfo(request *pb.SecretsListRequest, srv grpc.Se
 	}
 	return nil
 }
+
+func (s *GrpcServer) GetSecrets(stream grpc.BidiStreamingServer[pb.GetSecretsRequest, pb.GetSecretsResponse]) error {
+	for {
+		ctx := stream.Context()
+		req, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			code := codes.Unknown
+			return status.Errorf(code, "cannot receive stream request: %v", err)
+		}
+
+		logger.Logger.Info(fmt.Sprintf("got req: %+v", req))
+
+		res, err := s.app.GetSecret(ctx, req)
+		if err != nil {
+			return err
+		}
+
+		err = stream.Send(res)
+		if err != nil {
+			code := codes.Unknown
+			return status.Errorf(code, "cannot send stream response: %v", err)
+		}
+
+		// TODO отправка файла
+	}
+}

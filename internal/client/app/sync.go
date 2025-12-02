@@ -351,6 +351,10 @@ func (app *ClientApp) deleteSecretsWithRetry(
 
 func (app *ClientApp) syncFromServer(ctx context.Context, syncStatus *SyncStatus) error {
 	serverInfo, err := app.secretsListInfoWithRetry(ctx)
+	if err != nil {
+		return err
+	}
+
 	localInfo, err := app.store.SecretsListInfo(ctx)
 	if err != nil {
 		return err
