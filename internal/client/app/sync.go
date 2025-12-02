@@ -444,7 +444,7 @@ func (app *ClientApp) createSecretFromServer(ctx context.Context, info *pb.Secre
 	}
 
 	logger.Logger.Debug(fmt.Sprintf("try get secret from server id: %s", info.Id))
-	// получить данные по секрету
+	// получить секрет с сервера
 	resp, err := app.getSecretsWithRetry(ctx, stream, info)
 	if err != nil {
 		return err
