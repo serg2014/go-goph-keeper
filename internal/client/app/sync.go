@@ -55,6 +55,9 @@ func (app *ClientApp) Sync(ctx context.Context) (*SyncStatus, []error) {
 
 	err = app.syncUpdateSecretOnServer(ctx, syncStatus)
 	errorList = append(errorList, err)
+
+	// err = app.syncDeleteSecretOnServer(ctx, syncStatus)
+	// errorList = append(errorList, err)
 	// syncStatus содержит частично обновленные данные
 	return syncStatus, errorList
 }
@@ -214,7 +217,6 @@ func (app *ClientApp) syncUpdateSecretOnServer(ctx context.Context, syncStatus *
 	stream.CloseSend()
 	return nil
 }
-
 func (app *ClientApp) updateSecretsWithRetry(
 	ctx context.Context,
 	stream grpc.BidiStreamingClient[pb.UpdateSecretRequest, pb.UpdateSecretResponse],
@@ -277,6 +279,70 @@ func (app *ClientApp) updateSecretsWithRetry(
 	logger.RPCLogger.Debug(fmt.Sprintf("updateSecretsWithRetry error: %v", err))
 	return nil, err
 }
+
+// func (app *ClientApp) syncDeleteSecretOnServer(ctx context.Context, syncStatus *SyncStatus) error {
+// 	list, err := app.store.GetSecretsIDsForServerDelete(ctx)
+// 	if err != nil {
+// 		return nil
+// 	}
+
+// 	// Устанавливаем соединение стрима
+// 	stream, err := app.grpcKeep.DeleteSecrets(ctx)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	for _, id := range list {
+// 		logger.Logger.Debug(fmt.Sprintf("try delete secret id: %d", id))
+// 		// получить данные по секрету
+// 		secret, err := app.store.GetSecretForUpdate(ctx, id)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		resp, err := app.updateSecretsWithRetry(ctx, stream, secret)
+// 		if err != nil {
+// 			return err
+// 		}
+
+// 		conflict := make([]Conflicted, 0)
+// 		if resp.Secret.Meta != nil {
+// 			if resp.Secret.Meta.Conflict {
+// 				conflict = append(conflict, Conflicted{
+// 					SecretID: resp.Secret.Id,
+// 					Meta: &ConflictedID{
+// 						LocalVersion:  secret.Meta.Version,
+// 						RemoteVersion: resp.Secret.Meta.Version,
+// 					},
+// 				})
+// 			}
+// 		}
+// 		if resp.Secret.Data != nil {
+// 			if resp.Secret.Data.Conflict {
+// 				conflict = append(conflict, Conflicted{
+// 					SecretID: resp.Secret.Id,
+// 					Data: &ConflictedID{
+// 						LocalVersion:  secret.Data.Version,
+// 						RemoteVersion: resp.Secret.Data.Version,
+// 					},
+// 				})
+// 			}
+// 		}
+// 		if len(conflict) == 0 {
+// 			syncStatus.Remote.Updated++
+// 		} else {
+// 			syncStatus.Conflicted = append(syncStatus.Conflicted, conflict...)
+// 		}
+
+// 		// не обновлять конфликты
+// 		if len(conflict) == 0 {
+// 			err = app.store.UpdateSecretVersion(ctx, resp)
+// 			if err != nil {
+// 				return err
+// 			}
+// 		}
+// 	}
+// 	stream.CloseSend()
+// 	return nil
+// }
 
 /*
 func (app *ClientApp) syncCreateSecretOnServerq(ctx context.Context) error {
