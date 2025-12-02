@@ -345,10 +345,10 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 }
 
 func (s *storageDB) GetSecretsListInfo(ctx context.Context, userID models.UserID) ([]*pb.SecretsListResponse, error) {
-	query := `SELECT m.secret_id, m.vesrion as meta_version, d.version as data_version
+	query := `SELECT m.secret_id, m.version as meta_version, d.version as data_version
 	FROM meta as m
 	JOIN data as d ON d.secret_id = m.secret_id
-	WHERE user_id=$1`
+	WHERE m.user_id=$1`
 	rows, err := s.db.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, err
