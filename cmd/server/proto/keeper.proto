@@ -77,8 +77,18 @@ message UpdateSecretResponse {
     UpdateResponseInfo data = 4;
 }
 
+message DeleteSecretRequest {
+    string id = 1;
+    int64 meta_version = 2;
+    int64 data_version = 3;
+}
+message DeleteSecretResponse {
+    string id = 1;
+    bool conflict = 2;
+}
 service GophKeeperService {
     rpc Ping(PingRequest) returns (PingResponse);
     rpc CreateSecrets(stream CreateSecretRequest) returns (stream CreateSecretResponse);
     rpc UpdateSecrets(stream UpdateSecretRequest) returns (stream UpdateSecretResponse);
+    rpc DeleteSecrets(stream DeleteSecretRequest) returns (stream DeleteSecretResponse);
 }

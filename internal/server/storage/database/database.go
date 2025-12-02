@@ -274,3 +274,68 @@ func (s *storageDB) UpdateSecret(ctx context.Context, userID models.UserID, req 
 	}
 	return &res, nil
 }
+
+func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req *pb.DeleteSecretRequest) (*pb.DeleteSecretResponse, error) {
+	// начать транзакцию
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed transaction in CreateUser: %w", err)
+	}
+	defer tx.Rollback()
+
+	res := pb.DeleteSecretResponse{
+		Id: req.Id,
+	}
+
+	query := `SELECT m.version, d.version
+		FROM meta as m
+		JOIN data as d ON d.secret_id = m.secret_id
+		WHERE m.user_id=$1 and m.secret_id=$2
+		FOR UPDATE`
+	_, err = tx.ExecContext(ctx, query, userID, req.Id)
+	if err != nil {
+		// TODO сюда попадаем когда секрет на сервере был удален, а локально изменен
+		// либо нам прислали кривой секрет(попытка взлома)
+		return nil, fmt.Errorf("delete secret. failed select for update meta and data: %w", err)
+	}
+
+	query = `DELETE FROM meta WHERE user_id=$1 and secret_id=$2 and version=$3`
+	result, err := tx.ExecContext(ctx, query, userID, req.Id, req.MetaVersion)
+	if err != nil {
+		return nil, err
+	}
+	ra, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if ra == 0 {
+		res.Conflict = true
+		return &res, nil
+	}
+
+	query = `DELETE FROM data WHERE user_id=$1 and secret_id=$2 and version=$3`
+	result, err = tx.ExecContext(ctx, query, userID, req.Id, req.MetaVersion)
+	if err != nil {
+		return nil, err
+	}
+	ra, err = result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if ra == 0 {
+		res.Conflict = true
+		return &res, nil
+	}
+
+	query = `DELETE FROM secrets WHERE user_id=$1 and secret_id=$2`
+	_, err = tx.ExecContext(ctx, query, userID, req.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return nil, fmt.Errorf("delete secret. failed commit transaction: %w", err)
+	}
+	return &res, nil
+}

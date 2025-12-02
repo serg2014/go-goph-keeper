@@ -24,4 +24,5 @@ type Storager interface {
 	GetUser(ctx context.Context, login, passwordHash string) (*models.UserID, error)
 	CreateSecret(ctx context.Context, userID models.UserID, req *pb.CreateSecretRequest) (*pb.CreateSecretResponse, error)
 	UpdateSecret(ctx context.Context, userID models.UserID, req *pb.UpdateSecretRequest) (*pb.UpdateSecretResponse, error)
+	DeleteSecret(ctx context.Context, userID models.UserID, req *pb.DeleteSecretRequest) (*pb.DeleteSecretResponse, error)
 }

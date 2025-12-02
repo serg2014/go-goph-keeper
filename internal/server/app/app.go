@@ -46,3 +46,11 @@ func (app *MyApp) UpdateSecret(ctx context.Context, req *pb.UpdateSecretRequest)
 	}
 	return app.store.UpdateSecret(ctx, *userID, req)
 }
+
+func (app *MyApp) DeleteSecret(ctx context.Context, req *pb.DeleteSecretRequest) (*pb.DeleteSecretResponse, error) {
+	userID, err := auth.GetUserIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return app.store.DeleteSecret(ctx, *userID, req)
+}
