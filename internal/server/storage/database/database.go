@@ -283,7 +283,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 	}
 	defer tx.Rollback()
 
-	res := pb.DeleteSecretResponse{
+	res := &pb.DeleteSecretResponse{
 		Id: req.Id,
 	}
 
@@ -294,8 +294,12 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 		FOR UPDATE`
 	_, err = tx.ExecContext(ctx, query, userID, req.Id)
 	if err != nil {
-		// TODO сюда попадаем когда секрет на сервере был удален, а локально изменен
-		// либо нам прислали кривой секрет(попытка взлома)
+		if errors.Is(err, sql.ErrNoRows) {
+			// TODO сюда попадаем когда секрет на сервере был удален раньше чем локально
+			// либо нам прислали кривой секрет(попытка взлома)
+			// ничего страшного, пусть клиент удаляет
+			return res, nil
+		}
 		return nil, fmt.Errorf("delete secret. failed select for update meta and data: %w", err)
 	}
 
@@ -310,7 +314,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 	}
 	if ra == 0 {
 		res.Conflict = true
-		return &res, nil
+		return res, nil
 	}
 
 	query = `DELETE FROM data WHERE user_id=$1 and secret_id=$2 and version=$3`
@@ -324,7 +328,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 	}
 	if ra == 0 {
 		res.Conflict = true
-		return &res, nil
+		return res, nil
 	}
 
 	query = `DELETE FROM secrets WHERE user_id=$1 and secret_id=$2`
@@ -337,5 +341,5 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 	if err != nil {
 		return nil, fmt.Errorf("delete secret. failed commit transaction: %w", err)
 	}
-	return &res, nil
+	return res, nil
 }
