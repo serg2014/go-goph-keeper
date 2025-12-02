@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 	"errors"
-	"os"
 
+	"github.com/google/uuid"
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/client/auth"
 	"github.com/serg2014/go-goph-keeper/internal/client/config"
@@ -88,7 +88,7 @@ func (app *ClientApp) SecretsList(ctx context.Context) ([]models.Secret, error) 
 	return secrets, nil
 }
 
-func (app *ClientApp) GetSecret(ctx context.Context, id int64) (*models.Secret, error) {
+func (app *ClientApp) GetSecret(ctx context.Context, id uuid.UUID) (*models.Secret, error) {
 	secretDB, err := app.store.GetSecret(ctx, id)
 	if err != nil {
 		return nil, err
@@ -102,13 +102,13 @@ func (app *ClientApp) GetSecret(ctx context.Context, id int64) (*models.Secret, 
 	return secret, nil
 }
 
-func (app *ClientApp) DeleteSecret(ctx context.Context, id int64, filePath string) error {
+func (app *ClientApp) DeleteSecret(ctx context.Context, id uuid.UUID, secretType models.SecretType) error {
 	err := app.store.DeleteSecret(ctx, id)
 	if err != nil {
 		return err
 	}
-	if filePath != "" {
-		return os.Remove(filePath)
+	if secretType == models.SecretTypeFile {
+		return app.DeleteFileFromLocalStorage(id)
 	}
 
 	return nil

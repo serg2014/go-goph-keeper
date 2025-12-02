@@ -9,6 +9,7 @@ import (
 	"github.com/golang-migrate/migrate"
 	_ "github.com/golang-migrate/migrate/database/sqlite3"
 	_ "github.com/golang-migrate/migrate/source/file"
+	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/client/logger"
@@ -21,6 +22,14 @@ type TypeId int
 const (
 	MetaID TypeId = iota + 1
 	DataID
+)
+
+type Action int
+
+const (
+	CreateAction Action = iota
+	UpdateAction
+	DeleteAction
 )
 
 type storageDB struct {
@@ -74,30 +83,32 @@ func (s *storageDB) UpdateSecret(ctx context.Context, secretDB *models.SecretDB)
 	//strftime('%s', '2025-11-23 17:27:00')
 	//t := time.Now
 
-	query := `UPDATE meta SET data=?, updated_at=strftime('%s', 'now'), need_update=?
-	WHERE secret_id=?`
-	need_update := 0
-	if secretDB.ID > 0 {
-		need_update = 1
-	}
-	_, err = s.db.ExecContext(ctx, query, secretDB.Meta, need_update, secretDB.ID)
+	query := `UPDATE meta SET data=?, updated_at=strftime('%s', 'now') WHERE secret_id=?`
+	_, err = s.db.ExecContext(ctx, query, secretDB.Meta, secretDB.ID.String())
 	if err != nil {
 		return err
 	}
 
 	// если изменили только meta
 	if len(secretDB.Data) != 0 {
-		query = `UPDATE data SET data=?, updated_at=strftime('%s', 'now'), need_update=? 
-		WHERE secret_id=?`
-		_, err = s.db.ExecContext(ctx, query, secretDB.Data, need_update, secretDB.ID)
+		query = `UPDATE data SET data=?, updated_at=strftime('%s', 'now') WHERE secret_id=?`
+		_, err = s.db.ExecContext(ctx, query, secretDB.Data, secretDB.ID.String())
 
 		if err != nil {
 			return err
 		}
 	}
 
+	query = `INSERT INTO actions (secret_id, action_type) VALUES(?,?)
+	ON CONFLICT (secret_id) DO NOTHING`
+	_, err = tx.ExecContext(ctx, query, secretDB.ID.String(), UpdateAction)
+	if err != nil {
+		return nil
+	}
+
 	return tx.Commit()
 }
+
 func (s *storageDB) AddSecret(ctx context.Context, secretDB *models.SecretDB) error {
 	// начинаем транзакцию
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -106,60 +117,28 @@ func (s *storageDB) AddSecret(ctx context.Context, secretDB *models.SecretDB) er
 	}
 	defer tx.Rollback()
 
-	query := `SELECT min(id) FROM secrets`
-	row := tx.QueryRowContext(ctx, query)
-	var secretID sql.NullInt64
-	err = row.Scan(&secretID)
-	if err != nil {
-		return err
-	}
-	// null
-	if !secretID.Valid || secretID.Int64 > 0 {
-		secretID.Int64 = 0
-	}
-	secretID.Int64--
-	query = `INSERT INTO secrets (id, type) VALUES(?, ?)`
-	_, err = tx.ExecContext(ctx, query, secretID.Int64, secretDB.Type)
+	query := `INSERT INTO secrets (id, type) VALUES(?, ?)`
+	_, err = tx.ExecContext(ctx, query, secretDB.ID.String(), secretDB.Type)
 	if err != nil {
 		return err
 	}
 
-	query = `SELECT min(id) FROM meta`
-	row = tx.QueryRowContext(ctx, query)
-	var metaID sql.NullInt64
-	err = row.Scan(&metaID)
-	if err != nil {
-		return err
-	}
-	// null
-	if !metaID.Valid || metaID.Int64 > 0 {
-		metaID.Int64 = 0
-	}
-	metaID.Int64--
-
-	query = `INSERT INTO meta (id, secret_id, data) VALUES(?,?,?)`
-	_, err = tx.ExecContext(ctx, query, metaID.Int64, secretID.Int64, secretDB.Meta)
+	query = `INSERT INTO meta (secret_id, data) VALUES(?,?)`
+	_, err = tx.ExecContext(ctx, query, secretDB.ID.String(), secretDB.Meta)
 	if err != nil {
 		return nil
 	}
 
-	query = `SELECT min(id) FROM data`
-	row = tx.QueryRowContext(ctx, query)
-	var dataID sql.NullInt64
-	err = row.Scan(&dataID)
+	query = `INSERT INTO data (secret_id, data) VALUES(?,?)`
+	_, err = tx.ExecContext(ctx, query, secretDB.ID.String(), secretDB.Data)
 	if err != nil {
 		return err
 	}
-	// null
-	if !dataID.Valid || dataID.Int64 > 0 {
-		dataID.Int64 = 0
-	}
-	dataID.Int64--
 
-	query = `INSERT INTO data (id, secret_id, data) VALUES(?,?,?)`
-	_, err = tx.ExecContext(ctx, query, dataID.Int64, secretID.Int64, secretDB.Data)
+	query = `INSERT INTO actions (secret_id, action_type) VALUES(?,?)`
+	_, err = tx.ExecContext(ctx, query, secretDB.ID.String(), CreateAction)
 	if err != nil {
-		return err
+		return nil
 	}
 
 	return tx.Commit()
@@ -192,13 +171,13 @@ func (s *storageDB) SecretsList(ctx context.Context) ([]models.SecretDB, error) 
 	return list, nil
 }
 
-func (s *storageDB) GetSecret(ctx context.Context, id int64) (*models.SecretDB, error) {
+func (s *storageDB) GetSecret(ctx context.Context, id uuid.UUID) (*models.SecretDB, error) {
 	query := `SELECT s.id, s.type, m."data" as meta, d.data
 	FROM secrets as s 
 	JOIN meta as m ON m.secret_id = s.id
 	JOIN data as d ON d.secret_id = s.id
 	WHERE s.id = ?`
-	row := s.db.QueryRowContext(ctx, query, id)
+	row := s.db.QueryRowContext(ctx, query, id.String())
 	secretDB := &models.SecretDB{}
 	err := row.Scan(&secretDB.ID, &secretDB.Type, &secretDB.Meta, &secretDB.Data)
 	if err != nil {
@@ -207,7 +186,7 @@ func (s *storageDB) GetSecret(ctx context.Context, id int64) (*models.SecretDB, 
 	return secretDB, nil
 }
 
-func (s *storageDB) DeleteSecret(ctx context.Context, id int64) error {
+func (s *storageDB) DeleteSecret(ctx context.Context, id uuid.UUID) error {
 	// начинаем транзакцию
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -215,40 +194,41 @@ func (s *storageDB) DeleteSecret(ctx context.Context, id int64) error {
 	}
 	defer tx.Rollback()
 
-	if id > 0 {
-		query := `INSERT INTO deleted (secret_id, id, type_id, version) 
-		SELECT secret_id, id, ?, version 
-		FROM meta 
-		WHERE secret_id=?`
-		_, err = tx.ExecContext(ctx, query, MetaID, id, id)
-		if err != nil {
-			return err
-		}
-
-		query = `INSERT INTO deleted (secret_id, id, type_id, version) 
-		SELECT secret_id, id, ?, version 
-		FROM data 
-		WHERE secret_id=?`
-		_, err = tx.ExecContext(ctx, query, DataID, id, id)
-		if err != nil {
-			return err
-		}
+	query := `SELECT version FROM meta WHERE secret_id =?`
+	row := tx.QueryRowContext(ctx, query, id.String())
+	var version sql.NullInt64
+	err = row.Scan(&version)
+	if err != nil {
+		return err
 	}
 
-	query := `DELETE FROM secrets WHERE id=?`
-	_, err = tx.ExecContext(ctx, query, id)
+	// делать запись если уже синкали
+	if version.Valid {
+		query = `INSERT INTO actions (secret_id, action_type) VALUES(?,?)
+		ON CONFLICT (secret_id) DO UPDATE
+		SET action_type = EXCLUDED.action_type`
+	} else {
+		query = `DELETE FROM actions WHERE secret_id=?`
+	}
+	_, err = tx.ExecContext(ctx, query, id.String(), DeleteAction)
+	if err != nil {
+		return nil
+	}
+
+	query = `DELETE FROM secrets WHERE id=?`
+	_, err = tx.ExecContext(ctx, query, id.String())
 	if err != nil {
 		return err
 	}
 
 	query = `DELETE FROM meta WHERE secret_id=?`
-	_, err = tx.ExecContext(ctx, query, id)
+	_, err = tx.ExecContext(ctx, query, id.String())
 	if err != nil {
 		return err
 	}
 
 	query = `DELETE FROM data WHERE secret_id=?`
-	_, err = tx.ExecContext(ctx, query, id)
+	_, err = tx.ExecContext(ctx, query, id.String())
 	if err != nil {
 		return err
 	}

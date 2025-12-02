@@ -32,23 +32,23 @@ var (
 	ErrMaxFileSize   = fmt.Errorf("max file size %dM", MaxFileSize/1024/1024)
 )
 
-func tuiFormAddOrEditSecret(secret *models.Secret, save *bool, fn func(string, string) (string, error)) (*huh.Form, error) {
+func tuiFormAddOrEditSecret(secret *models.Secret, save *bool, isAddForm bool, fn func(string, string) (string, error)) (*huh.Form, error) {
 	var form *huh.Form
 	switch secret.Type {
 	case models.SecretTypeLogingPassword:
 		if secret.Data.LoginPassword == nil {
 			secret.Data.LoginPassword = &models.LoginPassword{}
 		}
-		form = tuiFormLoginPassword(secret, save)
+		form = tuiFormLoginPassword(secret, save, isAddForm)
 	case models.SecretTypeCreditCard:
 		if secret.Data.CreditCard == nil {
 			secret.Data.CreditCard = &models.CreditCard{}
 		}
-		form = tuiFormCredirCard(secret, save)
+		form = tuiFormCredirCard(secret, save, isAddForm)
 	case models.SecretTypeText:
-		form = tuiFormText(secret, save)
+		form = tuiFormText(secret, save, isAddForm)
 	case models.SecretTypeFile:
-		form = tuiFormFile(secret, save, fn)
+		form = tuiFormFile(secret, save, isAddForm, fn)
 	default:
 		return nil, ErrSecretType
 	}
@@ -56,7 +56,7 @@ func tuiFormAddOrEditSecret(secret *models.Secret, save *bool, fn func(string, s
 	return form, nil
 }
 
-func tuiFormLoginPassword(secret *models.Secret, save *bool) *huh.Form {
+func tuiFormLoginPassword(secret *models.Secret, save *bool, isAddForm bool) *huh.Form {
 	opts := []huh.Field{
 		huh.NewInput().
 			Key("login").
@@ -79,10 +79,10 @@ func tuiFormLoginPassword(secret *models.Secret, save *bool) *huh.Form {
 			}).
 			Value(&secret.Data.LoginPassword.Password),
 	}
-	return tuiFormHelper(secret, save, opts)
+	return tuiFormHelper(secret, save, isAddForm, opts)
 }
 
-func tuiFormCredirCard(secret *models.Secret, save *bool) *huh.Form {
+func tuiFormCredirCard(secret *models.Secret, save *bool, isAddForm bool) *huh.Form {
 	opts := []huh.Field{
 		huh.NewInput().
 			Title("Card number").
@@ -156,10 +156,10 @@ func tuiFormCredirCard(secret *models.Secret, save *bool) *huh.Form {
 			}).
 			Value(&secret.Data.CreditCard.Cvv),
 	}
-	return tuiFormHelper(secret, save, opts)
+	return tuiFormHelper(secret, save, isAddForm, opts)
 }
 
-func tuiFormText(secret *models.Secret, save *bool) *huh.Form {
+func tuiFormText(secret *models.Secret, save *bool, isAddForm bool) *huh.Form {
 	opts := []huh.Field{
 		huh.NewText().
 			Key("Text").
@@ -174,10 +174,10 @@ func tuiFormText(secret *models.Secret, save *bool) *huh.Form {
 			}).
 			Value(&secret.Data.Text),
 	}
-	return tuiFormHelper(secret, save, opts)
+	return tuiFormHelper(secret, save, isAddForm, opts)
 }
 
-func tuiFormFile(secret *models.Secret, save *bool, fn func(string, string) (string, error)) *huh.Form {
+func tuiFormFile(secret *models.Secret, save *bool, isAddForm bool, fn func(string, string) (string, error)) *huh.Form {
 	var size int
 	cryptPath := secret.Data.FilePath.Path
 	if cryptPath != "" {
@@ -222,10 +222,10 @@ func tuiFormFile(secret *models.Secret, save *bool, fn func(string, string) (str
 				}).Value(&show),
 		)
 	}
-	return tuiFormHelper(secret, save, opts)
+	return tuiFormHelper(secret, save, isAddForm, opts)
 }
 
-func tuiFormHelper(secret *models.Secret, save *bool, opts []huh.Field) *huh.Form {
+func tuiFormHelper(secret *models.Secret, save *bool, isAddForm bool, opts []huh.Field) *huh.Form {
 	options := []huh.Field{
 		huh.NewInput().
 			Title("Secret name").
@@ -249,7 +249,7 @@ func tuiFormHelper(secret *models.Secret, save *bool, opts []huh.Field) *huh.For
 				if b {
 					if secret.Type == models.SecretTypeFile {
 						if secret.Data.FilePath.Path == "" {
-							if secret.ID == 0 {
+							if isAddForm {
 								return fmt.Errorf("file: %w", ErrRequiredField)
 							}
 						} else {
@@ -277,7 +277,7 @@ func tuiFormHelper(secret *models.Secret, save *bool, opts []huh.Field) *huh.For
 				Title("Delete secret?").
 				Key("delete")).
 			WithHideFunc(func() bool {
-				return secret.ID == 0 || *save
+				return isAddForm || *save
 			}),
 	)
 }

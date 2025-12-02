@@ -1,9 +1,6 @@
 CREATE TABLE IF NOT EXISTS meta (
-    id integer NOT NULL PRIMARY KEY,
-    secret_id integer NOT NULL,
+    secret_id text(255) NOT NULL PRIMARY KEY,
     version integer,
     updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
-    need_update integer(1) NOT NULL DEFAULT (0),
     data blob NOT NULL
 );
-CREATE UNIQUE INDEX meta_secret_id_idx ON meta (secret_id);

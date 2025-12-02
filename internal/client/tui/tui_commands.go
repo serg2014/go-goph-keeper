@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"github.com/google/uuid"
 	"github.com/serg2014/go-goph-keeper/internal/client/app"
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
 )
@@ -29,10 +30,9 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 	opts := make([]huh.Option[*models.Secret], 0, len(secrets))
 	for _, item := range secrets {
 		b := strings.Builder{}
-		b.WriteString(fmt.Sprintf("%d ", item.ID))
-		b.WriteString(item.Meta.InternalMeta.SecretName)
-		b.WriteString(" ")
 		b.WriteString(item.Type.String())
+		b.WriteString(fmt.Sprintf(" %s ", item.ID.String()))
+		b.WriteString(item.Meta.InternalMeta.SecretName)
 		opts = append(opts, huh.NewOption(b.String(), &item))
 	}
 	form := huh.NewForm(
@@ -56,7 +56,8 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 
 	// show form for edit secret
 	save := false
-	form, err = tuiFormAddOrEditSecret(secret, &save, app.DescryptFileFromLocalStorage)
+	isAddForm := false
+	form, err = tuiFormAddOrEditSecret(secret, &save, isAddForm, app.DescryptFileFromLocalStorage)
 	if err != nil {
 		return err
 	}
@@ -75,7 +76,7 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 			return err
 		}
 	} else if form.GetBool("delete") {
-		err = app.DeleteSecret(ctx, secret.ID, secret.Data.FilePath.OldPath)
+		err = app.DeleteSecret(ctx, secret.ID, secret.Type)
 		if err != nil {
 			return err
 		}
@@ -106,6 +107,7 @@ func addSecret(ctx context.Context, app *app.ClientApp) error {
 	}
 
 	secret := &models.Secret{
+		ID:   uuid.New(),
 		Type: secretType,
 		Meta: models.BlockMeta{
 			Meta: make(models.Meta),
@@ -114,7 +116,8 @@ func addSecret(ctx context.Context, app *app.ClientApp) error {
 
 	save := false
 	// show form for add secret
-	form, err = tuiFormAddOrEditSecret(secret, &save, app.DescryptFileFromLocalStorage)
+	isAddForm := true
+	form, err = tuiFormAddOrEditSecret(secret, &save, isAddForm, app.DescryptFileFromLocalStorage)
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS actions;
+DROP TABLE IF EXISTS actions_type;

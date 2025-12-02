@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 
+	"github.com/google/uuid"
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
 )
@@ -13,8 +14,8 @@ type Storager interface {
 	AddSecret(ctx context.Context, secret *models.SecretDB) error
 	UpdateSecret(ctx context.Context, secret *models.SecretDB) error
 	SecretsList(ctx context.Context) ([]models.SecretDB, error)
-	GetSecret(ctx context.Context, id int64) (*models.SecretDB, error)
-	DeleteSecret(ctx context.Context, id int64) error
+	GetSecret(ctx context.Context, id uuid.UUID) (*models.SecretDB, error)
+	DeleteSecret(ctx context.Context, id uuid.UUID) error
 	// sync
 	GetSecretsIDsForCreate(ctx context.Context) ([]int64, error)
 	GetSecretForCreate(ctx context.Context, id int64) (*models.SecretDBCreateServer, error)

@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS secrets (
-    id integer NOT NULL PRIMARY KEY,
+    id text(255) NOT NULL PRIMARY KEY,
     type integer NOT NULL
 );
 

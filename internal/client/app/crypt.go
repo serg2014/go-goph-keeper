@@ -7,9 +7,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
 )
 
@@ -47,30 +46,31 @@ func (c *CryptFile) Read(p []byte) (int, error) {
 	return c.file.Read(p)
 }
 
-func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFilePath string) (string, error) {
+func (app *ClientApp) DeleteFileFromLocalStorage(secretID uuid.UUID) error {
+	return os.Remove(path.Join(app.config.DataDir(), secretID.String()))
+}
+
+func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFileName string) error {
 	fileR, err := os.Open(filePath)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer fileR.Close()
 
-	if cryptFilePath == "" {
-		cryptFilePath = path.Join(app.config.DataDir(), strconv.FormatInt(time.Now().Unix(), 10))
-	}
+	cryptFilePath := path.Join(app.config.DataDir(), cryptFileName)
 	fileW, err := os.OpenFile(cryptFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
-		return "", fmt.Errorf("%s: %w", cryptFilePath, err)
+		return fmt.Errorf("%s: %w", cryptFilePath, err)
 	}
 	defer fileW.Close()
 	cryptFile := NewCryptFile(fileW)
 
 	_, err = io.Copy(cryptFile, fileR)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	_, name := path.Split(cryptFilePath)
-	return name, nil
+	return nil
 }
 
 func (app *ClientApp) DescryptFileFromLocalStorage(cryptPath string, origName string) (string, error) {
@@ -150,12 +150,10 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 		}
 
 		// TODO копировать в tmp, потом переименовать
-		cryptName, err := app.CopyFileToLocalStorage(secret.Data.FilePath.Path, secret.Data.FilePath.OldPath)
+		err := app.CopyFileToLocalStorage(secret.Data.FilePath.Path, secret.ID.String())
 		if err != nil {
 			return err
 		}
-		// в базе храним относительные пути
-		secret.Data.FilePath.Path = cryptName
 		secretDB.Data, err = json.Marshal(secret.Data)
 		if err != nil {
 			return err
@@ -192,9 +190,9 @@ func (app *ClientApp) transformDBToData(secret *models.Secret, secretDB *models.
 		if err != nil {
 			return fmt.Errorf("unmarshal secret.data: %w", err)
 		}
-		// в базе пути хранятся относительно DataDir
-		secret.Data.FilePath.Path = path.Join(app.config.DataDir(), secret.Data.FilePath.Path)
-		secret.Data.FilePath.OldPath = secret.Data.FilePath.Path
+		// TODO удалить
+		secret.Data.FilePath.Path = path.Join(app.config.DataDir(), secret.ID.String())
+		// secret.Data.FilePath.OldPath = secret.Data.FilePath.Path
 	case models.SecretTypeText:
 		secret.Data.Text = string(secretDB.Data)
 	default:

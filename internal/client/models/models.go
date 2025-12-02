@@ -1,18 +1,22 @@
 package models
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/google/uuid"
+)
 
 type SecretDB struct {
-	ID   int64
+	ID   uuid.UUID
 	Type SecretType
 	Meta []byte
 	Data []byte
 }
 
 type Secret struct {
-	ID   int64
+	ID   uuid.UUID
 	Type SecretType
-	// Name string
 	Meta BlockMeta
 	Data Data
 }
@@ -30,13 +34,13 @@ const (
 func (s SecretType) String() string {
 	switch s {
 	case SecretTypeLogingPassword:
-		return "Login and Password"
+		return fmt.Sprintf("%c", rune(0x1F511)) // key
 	case SecretTypeCreditCard:
-		return "Credit/debit card"
+		return fmt.Sprintf("%c", rune(0x1F4B3)) // credit card
 	case SecretTypeText:
-		return "Text"
+		return fmt.Sprintf("%c", rune(0x1F4C4)) // text
 	case SecretTypeFile:
-		return "Binary"
+		return fmt.Sprintf("%c", rune(0x1F4C1)) // file folder
 	default:
 		return ""
 	}
@@ -68,7 +72,7 @@ type Data struct {
 }
 
 type FilePath struct {
-	Path     string `json:"path"`
+	Path     string `json:"-"`
 	OrigName string `json:"orig_name"`
 	OldPath  string `json:"-"`
 	TmpPath  string `json:"-"`
