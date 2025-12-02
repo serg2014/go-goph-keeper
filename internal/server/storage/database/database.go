@@ -343,3 +343,32 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 	}
 	return res, nil
 }
+
+func (s *storageDB) GetSecretsListInfo(ctx context.Context, userID models.UserID) ([]*pb.SecretsListResponse, error) {
+	query := `SELECT m.secret_id, m.vesrion as meta_version, d.version as data_version
+	FROM meta as m
+	JOIN data as d ON d.secret_id = m.secret_id
+	WHERE user_id=$1`
+	rows, err := s.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	// обязательно закрываем перед возвратом функции
+	defer rows.Close()
+
+	list := make([]*pb.SecretsListResponse, 0)
+	for rows.Next() {
+		var item pb.SecretsListResponse
+		err = rows.Scan(&item.Id, &item.MetaVersion, &item.DataVersion)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, &item)
+	}
+	// проверяем на ошибки
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
+	return list, nil
+}

@@ -54,3 +54,11 @@ func (app *MyApp) DeleteSecret(ctx context.Context, req *pb.DeleteSecretRequest)
 	}
 	return app.store.DeleteSecret(ctx, *userID, req)
 }
+
+func (app *MyApp) GetSecretsListInfo(ctx context.Context) ([]*pb.SecretsListResponse, error) {
+	userID, err := auth.GetUserIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return app.store.GetSecretsListInfo(ctx, *userID)
+}

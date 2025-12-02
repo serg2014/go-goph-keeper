@@ -131,3 +131,17 @@ func (s *GrpcServer) DeleteSecrets(stream grpc.BidiStreamingServer[pb.DeleteSecr
 		}
 	}
 }
+
+func (s *GrpcServer) SecretsListInfo(request *pb.SecretsListRequest, srv grpc.ServerStreamingServer[pb.SecretsListResponse]) error {
+	ctx := srv.Context()
+	list, err := s.app.GetSecretsListInfo(ctx)
+	if err != nil {
+		return err
+	}
+	for _, item := range list {
+		if err := srv.Send(item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
