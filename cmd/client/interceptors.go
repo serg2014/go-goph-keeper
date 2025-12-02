@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/serg2014/go-goph-keeper/internal/client/app"
@@ -143,7 +144,7 @@ func (w *wrappedStream) handleError(err error, isSend bool) error {
 
 	// Для Server-side streaming (RecvMsg) это работает лучше.
 
-	logger.Logger.Info("reconnect stream. A repeat operation is not guaranteed.")
+	logger.Logger.Info("reconnect stream. A repeat operation is not guaranteed.", slog.Bool("isSend", isSend))
 
 	return auth.ErrNeedRetry
 
