@@ -504,5 +504,24 @@ func (app *ClientApp) getSecretsWithRetry(
 }
 
 func (app *ClientApp) updateSecretFromServer(ctx context.Context, info *pb.SecretsListResponse) error {
+	// Устанавливаем соединение стрима
+	stream, err := app.grpcKeep.GetSecrets(ctx)
+	if err != nil {
+		return err
+	}
+
+	logger.Logger.Debug(fmt.Sprintf("try get secret from server id: %s", info.Id))
+	// получить секрет с сервера
+	resp, err := app.getSecretsWithRetry(ctx, stream, info)
+	if err != nil {
+		return err
+	}
+
+	err = app.store.ForceUpdateSecret(ctx, resp)
+	if err != nil {
+		return err
+	}
+
+	stream.CloseSend()
 	return nil
 }

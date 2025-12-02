@@ -674,6 +674,37 @@ func (s *storageDB) ForceCreateSecret(ctx context.Context, resp *pb.GetSecretsRe
 	return tx.Commit()
 }
 
+func (s *storageDB) ForceUpdateSecret(ctx context.Context, resp *pb.GetSecretsResponse) error {
+	// начинаем транзакцию
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `UPDATE meta SET version=?, updated_at=?, data=?
+	WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, resp.Meta.Version, resp.Meta.UpdatedAt, resp.Meta.Data, resp.Id)
+	if err != nil {
+		return err
+	}
+
+	query = `UPDATE data SET version=?, updated_at=?, data=?
+	WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, resp.Data.Version, resp.Data.UpdatedAt, resp.Data.Data, resp.Id)
+	if err != nil {
+		return err
+	}
+
+	query = `DELETE FROM actions WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, resp.Id)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 // func (s *storageDB) GetSecretsForCreate(ctx context.Context) ([]*models.SecretDBCreateServer, error) {
 // 	list := make([]*models.SecretDBCreateServer, 0, 10)
 // 	query := `SELECT s.id, s.type,
