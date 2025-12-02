@@ -19,8 +19,8 @@ type SyncMenuType int
 
 const (
 	SyncMenuTypeSyncRealTime SyncMenuType = iota
-	SyncMenuTypeRegister
 	SyncMenuTypeAuth
+	SyncMenuTypeRegister
 	SyncMenuTypeTest
 	SyncMenuTypeMax // Must be last
 )
