@@ -121,9 +121,9 @@ func (s *storageDB) CreateSecret(ctx context.Context, userID models.UserID, req 
 		Conflict: false,
 	}
 
-	query := `INSERT INTO secrets (id, user_id) VALUES ($1,$2)`
+	query := `INSERT INTO secrets (id, user_id, type) VALUES ($1,$2,$3)`
 	// TODO string -> uuid
-	_, err = tx.ExecContext(ctx, query, req.Secret.Id, userID)
+	_, err = tx.ExecContext(ctx, query, req.Secret.Id, userID, req.Secret.Type)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {

@@ -36,4 +36,5 @@ type Storager interface {
 
 	SecretsListInfo(ctx context.Context) (models.SecretListInfo, error)
 	ForceDelete(ctx context.Context, deleteIDs []string) error
+	ForceCreateSecret(ctx context.Context, resp *pb.GetSecretsResponse) error
 }

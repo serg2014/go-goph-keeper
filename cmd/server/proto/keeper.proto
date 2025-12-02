@@ -44,8 +44,9 @@ message SecretData {
 }
 message Secret {
     string id = 1;
-    SecretData meta = 2;
-    SecretData data = 3;
+    int32 type = 2;
+    SecretData meta = 3;
+    SecretData data = 4;
 }
 message CreateSecretRequest{
     Secret secret = 1;
@@ -110,9 +111,10 @@ message GetSecretsRequest {
 
 message GetSecretsResponse {
     string id = 1;
-    GetSecretInfo meta = 2;
-    GetSecretInfo data = 3;
-    StreamFileResponse file = 4;
+    int32 type = 2;
+    GetSecretInfo meta = 3;
+    GetSecretInfo data = 4;
+    StreamFileResponse file = 5;
 }
 message GetSecretInfo {
     int64 version = 1;

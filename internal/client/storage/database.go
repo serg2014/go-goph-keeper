@@ -644,6 +644,36 @@ func (s *storageDB) ForceDelete(ctx context.Context, deleteIDs []string) error {
 	return tx.Commit()
 }
 
+func (s *storageDB) ForceCreateSecret(ctx context.Context, resp *pb.GetSecretsResponse) error {
+	// начинаем транзакцию
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `INSERT INTO secrets (id, type) VALUES(?,?)`
+	// TODO
+	_, err = tx.ExecContext(ctx, query, resp.Id, resp.Type)
+	if err != nil {
+		return err
+	}
+
+	query = `INSERT INTO meta (secret_id, version, updated_at, data) VALUES(?,?,?,?)`
+	_, err = tx.ExecContext(ctx, query, resp.Id, resp.Meta.Version, resp.Meta.UpdatedAt, resp.Meta.Data)
+	if err != nil {
+		return err
+	}
+
+	query = `INSERT INTO data (secret_id, version, updated_at, data) VALUES(?,?,?,?)`
+	_, err = tx.ExecContext(ctx, query, resp.Id, resp.Data.Version, resp.Data.UpdatedAt, resp.Data.Data)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 // func (s *storageDB) GetSecretsForCreate(ctx context.Context) ([]*models.SecretDBCreateServer, error) {
 // 	list := make([]*models.SecretDBCreateServer, 0, 10)
 // 	query := `SELECT s.id, s.type,

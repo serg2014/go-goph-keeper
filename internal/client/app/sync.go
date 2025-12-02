@@ -107,7 +107,8 @@ func (app *ClientApp) createSecretsWithRetry(ctx context.Context, stream grpc.Bi
 	for range maxRetries {
 		req := &pb.CreateSecretRequest{
 			Secret: &pb.Secret{
-				Id: secret.ID.String(),
+				Id:   secret.ID.String(),
+				Type: int32(secret.Type),
 				Meta: &pb.SecretData{
 					UpdatedAt: secret.MetaUpdated,
 					Data:      secret.Meta,
@@ -362,12 +363,20 @@ func (app *ClientApp) syncFromServer(ctx context.Context, syncStatus *SyncStatus
 	for secret_id := range serverInfo {
 		if info, ok := localInfo[secret_id]; !ok {
 			// создаем
-			// syncStatus.Local.Added++
+			err := app.createSecretFromServer(ctx, serverInfo[secret_id])
+			if err != nil {
+				return err
+			}
+			syncStatus.Local.Added++
 		} else {
 			if serverInfo[secret_id].DataVersion != info.DataVersion ||
 				serverInfo[secret_id].MetaVersion != info.MetaVersion {
 				// обновляем
-				// syncStatus.Local.Updated++
+				err := app.updateSecretFromServer(ctx, serverInfo[secret_id])
+				if err != nil {
+					return err
+				}
+				syncStatus.Local.Updated++
 			}
 			delete(localInfo, secret_id)
 		}
@@ -425,4 +434,75 @@ func (app *ClientApp) secretsListInfoWithRetry(ctx context.Context) (models.Secr
 
 	logger.RPCLogger.Debug(fmt.Sprintf("secretsListInfoWithRetry error: %v", err))
 	return nil, err
+}
+
+func (app *ClientApp) createSecretFromServer(ctx context.Context, info *pb.SecretsListResponse) error {
+	// Устанавливаем соединение стрима
+	stream, err := app.grpcKeep.GetSecrets(ctx)
+	if err != nil {
+		return err
+	}
+
+	logger.Logger.Debug(fmt.Sprintf("try get secret from server id: %s", info.Id))
+	// получить данные по секрету
+	resp, err := app.getSecretsWithRetry(ctx, stream, info)
+	if err != nil {
+		return err
+	}
+
+	err = app.store.ForceCreateSecret(ctx, resp)
+	if err != nil {
+		return err
+	}
+
+	stream.CloseSend()
+	return nil
+}
+func (app *ClientApp) getSecretsWithRetry(
+	ctx context.Context,
+	stream grpc.BidiStreamingClient[pb.GetSecretsRequest, pb.GetSecretsResponse],
+	info *pb.SecretsListResponse) (*pb.GetSecretsResponse, error) {
+	var err error
+	for range maxRetries {
+		req := &pb.GetSecretsRequest{
+			Id: info.Id,
+		}
+
+		err = stream.Send(req)
+		if err != nil {
+			logger.RPCLogger.Debug(fmt.Sprintf("Send get error: %v", err))
+			if errors.Is(err, auth.ErrNeedRetry) {
+				continue // переходим к следующей попытке
+			}
+			// return fmt.Errorf("cannot send stream request: %v - %v", err, stream.RecvMsg(nil))
+			if !errors.Is(err, io.EOF) {
+				return nil, fmt.Errorf("cannot send stream request: %v", err)
+			}
+		}
+
+		var res *pb.GetSecretsResponse
+		res, err = stream.Recv()
+		if err != nil {
+			logger.RPCLogger.Debug(fmt.Sprintf("Recv get error: %v", err))
+		}
+		if err == io.EOF {
+			logger.RPCLogger.Debug("no more responses")
+			err = nil
+		}
+		if errors.Is(err, auth.ErrNeedRetry) {
+			continue // переходим к следующей попытке
+		}
+		if err != nil {
+			return nil, fmt.Errorf("cannot receive stream response: %v", err)
+		}
+		logger.RPCLogger.Debug(fmt.Sprintf("received response: %v", res))
+		return res, nil
+	}
+
+	logger.RPCLogger.Debug(fmt.Sprintf("updateSecretsWithRetry error: %v", err))
+	return nil, err
+}
+
+func (app *ClientApp) updateSecretFromServer(ctx context.Context, info *pb.SecretsListResponse) error {
+	return nil
 }
