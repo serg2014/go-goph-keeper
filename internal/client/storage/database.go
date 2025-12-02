@@ -147,8 +147,9 @@ func (s *storageDB) SecretsList(ctx context.Context) ([]models.SecretDB, error) 
 	query := `SELECT s.id, s.type, m."data", a.conflict 
 	FROM secrets as s 
 	JOIN meta as m ON m.secret_id = s.id
-	LEFT JOIN actions as a ON a.secret_id = s.id`
-	rows, err := s.db.QueryContext(ctx, query)
+	LEFT JOIN actions as a ON a.secret_id = s.id
+	WHERE a.action_type isNull or a.action_type != ?`
+	rows, err := s.db.QueryContext(ctx, query, DeleteAction)
 	if err != nil {
 		return nil, err
 	}
@@ -205,14 +206,20 @@ func (s *storageDB) DeleteSecret(ctx context.Context, secret_id uuid.UUID) error
 		return err
 	}
 
-	// делать запись если уже синкали
+	// если уже синкали тогда делаем вставку
 	if version.Valid {
 		query = `INSERT INTO actions (secret_id, action_type) VALUES(?,?)
 		ON CONFLICT (secret_id) DO UPDATE
 		SET action_type = EXCLUDED.action_type`
-	} else {
-		query = `DELETE FROM actions WHERE secret_id=?`
+		_, err = tx.ExecContext(ctx, query, secret_id.String(), DeleteAction)
+		if err != nil {
+			return err
+		}
+		return tx.Commit()
 	}
+
+	// если не синкали то можно удалять
+	query = `DELETE FROM actions WHERE secret_id=?`
 	_, err = tx.ExecContext(ctx, query, secret_id.String(), DeleteAction)
 	if err != nil {
 		return nil
