@@ -22,3 +22,10 @@ type SecretDBUpdateServer struct {
 	Meta *SecretDBUpdateServerBlock
 	Data *SecretDBUpdateServerBlock
 }
+
+type SecretDBDeleteServer struct {
+	ID          uuid.UUID
+	Type        SecretType
+	MetaVersion int64
+	DataVersion int64
+}

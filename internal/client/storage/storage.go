@@ -27,6 +27,10 @@ type Storager interface {
 	UpdateSecretVersionAfterCreate(ctx context.Context, secret_id uuid.UUID, conflict bool) error
 
 	GetSecretsIDsForServerUpdate(ctx context.Context) ([]uuid.UUID, error)
-	GetSecretForUpdate(ctx context.Context, id uuid.UUID) (*models.SecretDBUpdateServer, error)
-	UpdateSecretVersionAfterUpdate(ctx context.Context, data *pb.UpdateSecretResponse) error
+	GetSecretForUpdate(ctx context.Context, secret_id uuid.UUID) (*models.SecretDBUpdateServer, error)
+	UpdateSecretVersionAfterUpdate(ctx context.Context, resp *pb.UpdateSecretResponse) error
+
+	GetSecretsIDsForServerDelete(ctx context.Context) ([]uuid.UUID, error)
+	GetSecretForDelete(ctx context.Context, secret_id uuid.UUID) (*models.SecretDBDeleteServer, error)
+	UpdateSecretAfterDelete(ctx context.Context, resp *pb.DeleteSecretResponse) error
 }

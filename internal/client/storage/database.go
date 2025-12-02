@@ -309,7 +309,7 @@ func (s *storageDB) UpdateSecretVersionAfterCreate(ctx context.Context, secret_i
 		if err != nil {
 			return err
 		}
-		return nil
+		return tx.Commit()
 	}
 
 	query := `UPDATE meta SET version=0, need_update=0 WHERE secret_id=?`
@@ -333,6 +333,7 @@ func (s *storageDB) UpdateSecretVersionAfterCreate(ctx context.Context, secret_i
 	return tx.Commit()
 }
 
+// Update
 func (s *storageDB) GetSecretsIDsForServerUpdate(ctx context.Context) ([]uuid.UUID, error) {
 	query := `SELECT secret_id
 	FROM actions 
@@ -424,7 +425,7 @@ func (s *storageDB) UpdateSecretVersionAfterUpdate(ctx context.Context, resp *pb
 		if err != nil {
 			return err
 		}
-		return nil
+		return tx.Commit()
 	}
 
 	if resp.Meta != nil {
@@ -450,6 +451,96 @@ func (s *storageDB) UpdateSecretVersionAfterUpdate(ctx context.Context, resp *pb
 
 	logger.Logger.Debug("after update: delete actions")
 	query := `DELETE FROM actions WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, resp.Id)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// Delete
+func (s *storageDB) GetSecretsIDsForServerDelete(ctx context.Context) ([]uuid.UUID, error) {
+	query := `SELECT secret_id
+	FROM actions 
+	WHERE action_type = ? and conflict = 0`
+	rows, err := s.db.QueryContext(ctx, query, DeleteAction)
+	if err != nil {
+		return nil, err
+	}
+	// обязательно закрываем перед возвратом функции
+	defer rows.Close()
+
+	list := make([]uuid.UUID, 0, 10)
+	for rows.Next() {
+		var id uuid.UUID
+		err = rows.Scan(&id)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, id)
+	}
+	// проверяем на ошибки
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+func (s *storageDB) GetSecretForDelete(ctx context.Context, secret_id uuid.UUID) (*models.SecretDBDeleteServer, error) {
+	query := `SELECT s.id, s.type,
+	m.version as meta_version, d.version as data_version
+	FROM secrets as s
+	JOIN meta as m ON m.secret_id = s.id
+	JOIN data as d ON d.secret_id = s.id
+	WHERE s.id = ?`
+	row := s.db.QueryRowContext(ctx, query, DeleteAction, secret_id)
+	item := &models.SecretDBDeleteServer{}
+	err := row.Scan(&item.ID, &item.Type, &item.MetaVersion, &item.DataVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	return item, nil
+}
+
+func (s *storageDB) UpdateSecretAfterDelete(ctx context.Context, resp *pb.DeleteSecretResponse) error {
+	// начинаем транзакцию
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if resp.Conflict {
+		query := `UPDATE actions SET conflict=1 WHERE secret_id=?`
+		_, err = tx.ExecContext(ctx, query, resp.Id)
+		if err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+
+	query := `DELETE FROM secrets WHERE id=?`
+	_, err = tx.ExecContext(ctx, query, resp.Id)
+	if err != nil {
+		return err
+	}
+
+	query = `DELETE FROM meta WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, resp.Id)
+	if err != nil {
+		return err
+	}
+
+	query = `DELETE FROM data WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, resp.Id)
+	if err != nil {
+		return err
+	}
+
+	query = `DELETE FROM actions WHERE secret_id=?`
 	_, err = tx.ExecContext(ctx, query, resp.Id)
 	if err != nil {
 		return err
