@@ -331,7 +331,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 		return res, nil
 	}
 
-	query = `DELETE FROM secrets WHERE user_id=$1 and secret_id=$2`
+	query = `DELETE FROM secrets WHERE user_id=$1 and id=$2`
 	_, err = tx.ExecContext(ctx, query, userID, req.Id)
 	if err != nil {
 		return nil, err
