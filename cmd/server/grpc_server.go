@@ -90,7 +90,7 @@ func (s *GrpcServer) UpdateSecrets(stream grpc.BidiStreamingServer[pb.UpdateSecr
 			return status.Errorf(code, "cannot receive stream request: %v", err)
 		}
 
-		logger.Logger.Info(fmt.Sprintf("got req: %+v", req.Secret))
+		logger.Logger.Info(fmt.Sprintf("got req: %+v", req))
 
 		res, err := s.app.UpdateSecret(ctx, req)
 		if err != nil {

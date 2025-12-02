@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/google/uuid"
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/client/auth"
 	"github.com/serg2014/go-goph-keeper/internal/client/logger"
@@ -16,24 +17,13 @@ import (
 type SyncStatus struct {
 	Remote     Status
 	Local      Status
-	Conflicted []Conflicted
+	Conflicted []uuid.UUID
 }
 
 type Status struct {
 	Added   int
 	Updated int
 	Deleted int
-}
-
-type Conflicted struct {
-	SecretID int64
-	Meta     *ConflictedID
-	Data     *ConflictedID
-}
-
-type ConflictedID struct {
-	LocalVersion  int64
-	RemoteVersion int64
 }
 
 func (app *ClientApp) Sync(ctx context.Context) (*SyncStatus, []error) {
@@ -46,7 +36,7 @@ func (app *ClientApp) Sync(ctx context.Context) (*SyncStatus, []error) {
 		6. Создаем секреты локально
 	*/
 	syncStatus := &SyncStatus{
-		Conflicted: make([]Conflicted, 0),
+		Conflicted: make([]uuid.UUID, 0),
 	}
 	errorList := make([]error, 0)
 
@@ -89,13 +79,20 @@ func (app *ClientApp) syncCreateSecretOnServer(ctx context.Context, syncStatus *
 			return errors.New("resp nil")
 		}
 
-		syncStatus.Remote.Added++
+		id, err := uuid.Parse(resp.Id)
+		if err != nil {
+			return fmt.Errorf("can not parse uuid: %w", err)
+		}
 
-		err = app.store.MoveSecret(ctx, resp)
+		if resp.Conflict {
+			syncStatus.Conflicted = append(syncStatus.Conflicted, id)
+		} else {
+			syncStatus.Remote.Added++
+		}
+		err = app.store.UpdateSecretVersionAfterCreate(ctx, id, resp.Conflict)
 		if err != nil {
 			return err
 		}
-
 	}
 	stream.CloseSend()
 	return nil
@@ -105,14 +102,12 @@ func (app *ClientApp) createSecretsWithRetry(ctx context.Context, stream grpc.Bi
 	for range maxRetries {
 		req := &pb.CreateSecretRequest{
 			Secret: &pb.Secret{
-				Id: secret.ID,
+				Id: secret.ID.String(),
 				Meta: &pb.SecretData{
-					Id:        secret.MetaID,
 					UpdatedAt: secret.MetaUpdated,
 					Data:      secret.Meta,
 				},
 				Data: &pb.SecretData{
-					Id:        secret.DataID,
 					UpdatedAt: secret.DataUpdated,
 					Data:      secret.Data,
 				},
@@ -165,10 +160,10 @@ func (app *ClientApp) syncUpdateSecretOnServer(ctx context.Context, syncStatus *
 	if err != nil {
 		return err
 	}
-	for _, id := range list {
-		logger.Logger.Debug(fmt.Sprintf("try update secret id: %d", id))
+	for _, secret_id := range list {
+		logger.Logger.Debug(fmt.Sprintf("try update secret id: %s", secret_id.String()))
 		// получить данные по секрету
-		secret, err := app.store.GetSecretForUpdate(ctx, id)
+		secret, err := app.store.GetSecretForUpdate(ctx, secret_id)
 		if err != nil {
 			return err
 		}
@@ -177,42 +172,22 @@ func (app *ClientApp) syncUpdateSecretOnServer(ctx context.Context, syncStatus *
 			return err
 		}
 
-		conflict := make([]Conflicted, 0)
-		if resp.Secret.Meta != nil {
-			if resp.Secret.Meta.Conflict {
-				conflict = append(conflict, Conflicted{
-					SecretID: resp.Secret.Id,
-					Meta: &ConflictedID{
-						LocalVersion:  secret.Meta.Version,
-						RemoteVersion: resp.Secret.Meta.Version,
-					},
-				})
-			}
-		}
-		if resp.Secret.Data != nil {
-			if resp.Secret.Data.Conflict {
-				conflict = append(conflict, Conflicted{
-					SecretID: resp.Secret.Id,
-					Data: &ConflictedID{
-						LocalVersion:  secret.Data.Version,
-						RemoteVersion: resp.Secret.Data.Version,
-					},
-				})
-			}
-		}
-		if len(conflict) == 0 {
-			syncStatus.Remote.Updated++
-		} else {
-			syncStatus.Conflicted = append(syncStatus.Conflicted, conflict...)
+		id, err := uuid.Parse(resp.Id)
+		if err != nil {
+			return fmt.Errorf("parse uuid: %w", err)
 		}
 
-		// не обновлять конфликты
-		if len(conflict) == 0 {
-			err = app.store.UpdateSecretVersion(ctx, resp)
-			if err != nil {
-				return err
-			}
+		if resp.Conflict {
+			syncStatus.Conflicted = append(syncStatus.Conflicted, id)
+		} else {
+			syncStatus.Remote.Updated++
 		}
+
+		err = app.store.UpdateSecretVersionAfterUpdate(ctx, resp)
+		if err != nil {
+			return err
+		}
+
 	}
 	stream.CloseSend()
 	return nil
@@ -224,21 +199,17 @@ func (app *ClientApp) updateSecretsWithRetry(
 	var err error
 	for range maxRetries {
 		req := &pb.UpdateSecretRequest{
-			Secret: &pb.SecretUpdate{
-				Id: secret.ID,
-			},
+			Id: secret.ID.String(),
 		}
 		if secret.Meta != nil {
-			req.Secret.Meta = &pb.SecretDataUpdate{
-				Id:        secret.Meta.ID,
+			req.Meta = &pb.UpdateRequestInfo{
 				UpdatedAt: secret.Meta.Updated,
 				Version:   secret.Meta.Version,
 				Data:      secret.Meta.Data,
 			}
 		}
 		if secret.Data != nil {
-			req.Secret.Data = &pb.SecretDataUpdate{
-				Id:        secret.Data.ID,
+			req.Data = &pb.UpdateRequestInfo{
 				UpdatedAt: secret.Data.Updated,
 				Version:   secret.Data.Version,
 				Data:      secret.Data.Data,

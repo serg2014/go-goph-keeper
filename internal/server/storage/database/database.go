@@ -116,56 +116,48 @@ func (s *storageDB) CreateSecret(ctx context.Context, userID models.UserID, req 
 	}
 	defer tx.Rollback()
 
-	res := pb.CreateSecretResponse{
-		Secret: &pb.SecretLite{
-			Secret: &pb.SecretDataLite{
-				Id: req.Secret.Id,
-			},
-			Meta: &pb.SecretDataLite{
-				Id: req.Secret.Meta.Id,
-			},
-			Data: &pb.SecretDataLite{
-				Id: req.Secret.Data.Id,
-			},
-		},
+	res := &pb.CreateSecretResponse{
+		Id:       req.Secret.Id,
+		Conflict: false,
 	}
 
-	query := `INSERT INTO secrets (user_id) VALUES ($1) RETURNING id`
-	row := tx.QueryRowContext(ctx, query, userID)
-	err = row.Scan(&res.Secret.Secret.ServerId)
+	query := `INSERT INTO secrets (id, user_id) VALUES ($1,$2)`
+	// TODO string -> uuid
+	_, err = tx.ExecContext(ctx, query, req.Secret.Id, userID)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
 			if pgErr.Code == pgerrcode.UniqueViolation {
-				return nil, storage.ErrSecretExists
+				res.Conflict = true
+				return res, nil
 			}
 		}
 		return nil, fmt.Errorf("failed create secret: %w", err)
 	}
 
 	query = `INSERT INTO meta (user_id, secret_id, updated_at, data) 
-	VALUES ($1, $2, $3, $4) RETURNING id`
-	row = tx.QueryRowContext(ctx, query, userID, res.Secret.Secret.ServerId, req.Secret.Meta.UpdatedAt, req.Secret.Meta.Data)
-	err = row.Scan(&res.Secret.Meta.ServerId)
+	VALUES ($1, $2, $3, $4)`
+	_, err = tx.ExecContext(ctx, query, userID, req.Secret.Id, req.Secret.Meta.UpdatedAt, req.Secret.Meta.Data)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
 			if pgErr.Code == pgerrcode.UniqueViolation {
-				return nil, storage.ErrMetaExists
+				res.Conflict = true
+				return res, nil
 			}
 		}
 		return nil, fmt.Errorf("failed create meta: %w", err)
 	}
 
 	query = `INSERT INTO data (user_id, secret_id, updated_at, data) 
-	VALUES ($1, $2, $3, $4) RETURNING id`
-	row = tx.QueryRowContext(ctx, query, userID, res.Secret.Secret.ServerId, req.Secret.Data.UpdatedAt, req.Secret.Data.Data)
-	err = row.Scan(&res.Secret.Data.ServerId)
+	VALUES ($1, $2, $3, $4)`
+	_, err = tx.ExecContext(ctx, query, userID, req.Secret.Id, req.Secret.Data.UpdatedAt, req.Secret.Data.Data)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
 			if pgErr.Code == pgerrcode.UniqueViolation {
-				return nil, storage.ErrDataExists
+				res.Conflict = true
+				return res, nil
 			}
 		}
 		return nil, fmt.Errorf("failed create data: %w", err)
@@ -175,7 +167,7 @@ func (s *storageDB) CreateSecret(ctx context.Context, userID models.UserID, req 
 	if err != nil {
 		return nil, fmt.Errorf("create secret. failed commit transaction: %w", err)
 	}
-	return &res, nil
+	return res, nil
 }
 
 func (s *storageDB) UpdateSecret(ctx context.Context, userID models.UserID, req *pb.UpdateSecretRequest) (*pb.UpdateSecretResponse, error) {
@@ -186,23 +178,20 @@ func (s *storageDB) UpdateSecret(ctx context.Context, userID models.UserID, req 
 	}
 	defer tx.Rollback()
 
-	res := pb.UpdateSecretResponse{
-		Secret: &pb.SecretLiteUpdate{
-			Id: req.Secret.Id,
-		},
+	if req.Meta == nil && req.Data == nil {
+		return nil, storage.ErrMetaAndDataEmpty
 	}
 
-	if req.Secret.Meta != nil {
-		res.Secret.Meta = &pb.SecretDataLiteUpdate{
-			Id: req.Secret.Meta.Id,
-		}
+	res := pb.UpdateSecretResponse{
+		Id: req.Id,
+	}
 
+	if req.Meta != nil {
 		query := `SELECT version
 		FROM meta
-		WHERE id=$1 and user_id=$2
+		WHERE secret_id=$1 and user_id=$2
 		FOR UPDATE`
-		row := tx.QueryRowContext(ctx, query, req.Secret.Meta.Id, userID)
-		err := row.Scan(&res.Secret.Meta.Version)
+		_, err := tx.ExecContext(ctx, query, req.Id, userID)
 		if err != nil {
 			// TODO сюда попадаем когда секрет на сервере был удален, а локально изменен
 			// либо нам прислали кривой секрет(попытка взлома)
@@ -211,14 +200,14 @@ func (s *storageDB) UpdateSecret(ctx context.Context, userID models.UserID, req 
 
 		query = `UPDATE meta
 		SET version=$1, updated_at=$2, data=$3
-		WHERE id=$4 and user_id=$5 and version=$6`
+		WHERE secret_id=$4 and user_id=$5 and version=$6`
 		sqlRes, err := tx.ExecContext(ctx, query,
-			req.Secret.Meta.Version+1,
-			req.Secret.Meta.UpdatedAt,
-			req.Secret.Meta.Data,
-			req.Secret.Meta.Id,
+			req.Meta.Version+1,
+			req.Meta.UpdatedAt,
+			req.Meta.Data,
+			req.Id,
 			userID,
-			req.Secret.Meta.Version,
+			req.Meta.Version,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed update meta: %w", err)
@@ -229,36 +218,35 @@ func (s *storageDB) UpdateSecret(ctx context.Context, userID models.UserID, req 
 			return nil, fmt.Errorf("update meta. RowsAffected: %w", err)
 		}
 		if ra == 0 {
-			res.Secret.Meta.Conflict = true
+			res.Conflict = true
 			return &res, nil
+		}
+
+		res.Meta = &pb.UpdateResponseInfo{
+			Version: req.Meta.Version + 1,
 		}
 	}
 
-	if req.Secret.Data != nil {
-		res.Secret.Data = &pb.SecretDataLiteUpdate{
-			Id: req.Secret.Data.Id,
-		}
-
+	if req.Data != nil {
 		query := `SELECT version
 		FROM data
-		WHERE id=$1 and user_id=$2
+		WHERE secret_id=$1 and user_id=$2
 		FOR UPDATE`
-		row := tx.QueryRowContext(ctx, query, req.Secret.Data.Id, userID)
-		err := row.Scan(&res.Secret.Data.Version)
+		_, err := tx.ExecContext(ctx, query, req.Id, userID)
 		if err != nil {
-			return nil, fmt.Errorf("failed update meta: %w", err)
+			return nil, fmt.Errorf("failed update data: %w", err)
 		}
 
 		query = `UPDATE data
 		SET version=$1, updated_at=$2, data=$3
-		WHERE id=$4 and user_id=$5 and version=$6`
+		WHERE secret_id=$4 and user_id=$5 and version=$6`
 		sqlRes, err := tx.ExecContext(ctx, query,
-			req.Secret.Data.Version+1,
-			req.Secret.Data.UpdatedAt,
-			req.Secret.Data.Data,
-			req.Secret.Data.Id,
+			req.Data.Version+1,
+			req.Data.UpdatedAt,
+			req.Data.Data,
+			req.Id,
 			userID,
-			req.Secret.Data.Version,
+			req.Data.Version,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed update data: %w", err)
@@ -268,16 +256,16 @@ func (s *storageDB) UpdateSecret(ctx context.Context, userID models.UserID, req 
 		if err != nil {
 			return nil, fmt.Errorf("update data. RowsAffected: %w", err)
 		}
-		if ra != 0 {
-			res.Secret.Data.Version++
-		} else {
-			res.Secret.Data.Conflict = true
+
+		if ra == 0 {
+			res.Conflict = true
+			res.Meta = nil
 			return &res, nil
 		}
-	}
 
-	if res.Secret.Meta != nil {
-		res.Secret.Meta.Version++
+		res.Data = &pb.UpdateResponseInfo{
+			Version: req.Data.Version + 1,
+		}
 	}
 
 	err = tx.Commit()

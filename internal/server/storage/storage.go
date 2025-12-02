@@ -9,11 +9,12 @@ import (
 )
 
 var (
-	ErrUserExists     = errors.New("user exists")
-	ErrUserOrPassword = errors.New("bad user or password")
-	ErrSecretExists   = errors.New("secret exists")
-	ErrMetaExists     = errors.New("meta exists")
-	ErrDataExists     = errors.New("data exists")
+	ErrUserExists       = errors.New("user exists")
+	ErrUserOrPassword   = errors.New("bad user or password")
+	ErrSecretExists     = errors.New("secret exists")
+	ErrMetaExists       = errors.New("meta exists")
+	ErrDataExists       = errors.New("data exists")
+	ErrMetaAndDataEmpty = errors.New("meta and data emty")
 )
 
 // Storager interface

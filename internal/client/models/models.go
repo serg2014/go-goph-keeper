@@ -8,17 +8,19 @@ import (
 )
 
 type SecretDB struct {
-	ID   uuid.UUID
-	Type SecretType
-	Meta []byte
-	Data []byte
+	ID       uuid.UUID
+	Type     SecretType
+	Conflict bool
+	Meta     []byte
+	Data     []byte
 }
 
 type Secret struct {
-	ID   uuid.UUID
-	Type SecretType
-	Meta BlockMeta
-	Data Data
+	ID       uuid.UUID
+	Type     SecretType
+	Conflict bool
+	Meta     BlockMeta
+	Data     Data
 }
 
 type SecretType int

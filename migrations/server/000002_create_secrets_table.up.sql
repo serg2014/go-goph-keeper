@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS secrets (
-    id BIGSERIAL PRIMARY KEY,
+    id uuid NOT NULL PRIMARY KEY,
     user_id uuid NOT NULL
 );
 

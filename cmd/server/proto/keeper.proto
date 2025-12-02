@@ -39,12 +39,11 @@ message PingRequest {}
 message PingResponse {}
 
 message SecretData {
-    int64 id = 1;
-    int64 updated_at = 2;
-    bytes data = 3;
+    int64 updated_at = 1;
+    bytes data = 2;
 }
 message Secret {
-    int64 id = 1;
+    string id = 1;
     SecretData meta = 2;
     SecretData data = 3;
 }
@@ -52,46 +51,30 @@ message CreateSecretRequest{
     Secret secret = 1;
 }
 
-message SecretDataLite {
-    int64 id = 1;
-    int64 server_id = 2;
-}
-message SecretLite {
-    SecretDataLite secret = 1;
-    SecretDataLite meta = 2;
-    SecretDataLite data = 3;
-}
 message CreateSecretResponse{
-    SecretLite secret = 1;
+    string id = 1;
+    bool conflict = 2;
 }
 
-message SecretDataUpdate {
-    int64 id = 1;
+message UpdateRequestInfo {
     int64 updated_at = 2;
     int64 version = 3;
     bytes data = 4;  
 }
-message SecretUpdate {
-    int64 id = 1;
-    SecretDataUpdate meta = 2;
-    SecretDataUpdate data = 3;
-}
 message UpdateSecretRequest {
-    SecretUpdate secret = 1;
+    string id = 1;
+    UpdateRequestInfo meta = 2;
+    UpdateRequestInfo data = 3;
 }
 
-message SecretDataLiteUpdate {
-    int64 id = 1;
-    int64 version = 2;
-    bool conflict = 3;
-}
-message SecretLiteUpdate {
-    int64 id = 1;
-    SecretDataLiteUpdate meta = 2;
-    SecretDataLiteUpdate data = 3;
+message UpdateResponseInfo {
+    int64 version = 1;
 }
 message UpdateSecretResponse {
-    SecretLiteUpdate secret = 1;
+    string id = 1;
+    bool conflict = 2;
+    UpdateResponseInfo meta = 3;
+    UpdateResponseInfo data = 4;
 }
 
 service GophKeeperService {

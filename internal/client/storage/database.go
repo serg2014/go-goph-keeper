@@ -17,13 +17,6 @@ import (
 	// _ "modernc.org/sqlite"
 )
 
-type TypeId int
-
-const (
-	MetaID TypeId = iota + 1
-	DataID
-)
-
 type Action int
 
 const (
@@ -83,23 +76,28 @@ func (s *storageDB) UpdateSecret(ctx context.Context, secretDB *models.SecretDB)
 	//strftime('%s', '2025-11-23 17:27:00')
 	//t := time.Now
 
-	query := `UPDATE meta SET data=?, updated_at=strftime('%s', 'now') WHERE secret_id=?`
-	_, err = s.db.ExecContext(ctx, query, secretDB.Meta, secretDB.ID.String())
-	if err != nil {
-		return err
+	if len(secretDB.Meta) == 0 && len(secretDB.Data) == 0 {
+		return ErrMetaAndDataEmpty
 	}
 
-	// если изменили только meta
+	if len(secretDB.Meta) != 0 {
+		query := `UPDATE meta SET data=?, updated_at=strftime('%s', 'now'), need_update=1 WHERE secret_id=?`
+		_, err := tx.ExecContext(ctx, query, secretDB.Meta, secretDB.ID.String())
+		if err != nil {
+			return err
+		}
+	}
+
 	if len(secretDB.Data) != 0 {
-		query = `UPDATE data SET data=?, updated_at=strftime('%s', 'now') WHERE secret_id=?`
-		_, err = s.db.ExecContext(ctx, query, secretDB.Data, secretDB.ID.String())
+		query := `UPDATE data SET data=?, updated_at=strftime('%s', 'now'), need_update=1 WHERE secret_id=?`
+		_, err := tx.ExecContext(ctx, query, secretDB.Data, secretDB.ID.String())
 
 		if err != nil {
 			return err
 		}
 	}
 
-	query = `INSERT INTO actions (secret_id, action_type) VALUES(?,?)
+	query := `INSERT INTO actions (secret_id, action_type) VALUES(?,?)
 	ON CONFLICT (secret_id) DO NOTHING`
 	_, err = tx.ExecContext(ctx, query, secretDB.ID.String(), UpdateAction)
 	if err != nil {
@@ -146,9 +144,10 @@ func (s *storageDB) AddSecret(ctx context.Context, secretDB *models.SecretDB) er
 
 func (s *storageDB) SecretsList(ctx context.Context) ([]models.SecretDB, error) {
 	list := make([]models.SecretDB, 0)
-	query := `SELECT s.id, s.type, m."data" 
+	query := `SELECT s.id, s.type, m."data", a.conflict 
 	FROM secrets as s 
-	JOIN meta as m ON m.secret_id = s.id`
+	JOIN meta as m ON m.secret_id = s.id
+	LEFT JOIN actions as a ON a.secret_id = s.id`
 	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -157,9 +156,13 @@ func (s *storageDB) SecretsList(ctx context.Context) ([]models.SecretDB, error) 
 	defer rows.Close()
 	for rows.Next() {
 		var item models.SecretDB
-		err = rows.Scan(&item.ID, &item.Type, &item.Meta)
+		var conflict sql.NullBool
+		err = rows.Scan(&item.ID, &item.Type, &item.Meta, &conflict)
 		if err != nil {
 			return nil, err
+		}
+		if conflict.Valid {
+			item.Conflict = conflict.Bool
 		}
 		list = append(list, item)
 	}
@@ -171,13 +174,13 @@ func (s *storageDB) SecretsList(ctx context.Context) ([]models.SecretDB, error) 
 	return list, nil
 }
 
-func (s *storageDB) GetSecret(ctx context.Context, id uuid.UUID) (*models.SecretDB, error) {
+func (s *storageDB) GetSecret(ctx context.Context, secret_id uuid.UUID) (*models.SecretDB, error) {
 	query := `SELECT s.id, s.type, m."data" as meta, d.data
 	FROM secrets as s 
 	JOIN meta as m ON m.secret_id = s.id
 	JOIN data as d ON d.secret_id = s.id
 	WHERE s.id = ?`
-	row := s.db.QueryRowContext(ctx, query, id.String())
+	row := s.db.QueryRowContext(ctx, query, secret_id.String())
 	secretDB := &models.SecretDB{}
 	err := row.Scan(&secretDB.ID, &secretDB.Type, &secretDB.Meta, &secretDB.Data)
 	if err != nil {
@@ -186,7 +189,7 @@ func (s *storageDB) GetSecret(ctx context.Context, id uuid.UUID) (*models.Secret
 	return secretDB, nil
 }
 
-func (s *storageDB) DeleteSecret(ctx context.Context, id uuid.UUID) error {
+func (s *storageDB) DeleteSecret(ctx context.Context, secret_id uuid.UUID) error {
 	// начинаем транзакцию
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -195,7 +198,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, id uuid.UUID) error {
 	defer tx.Rollback()
 
 	query := `SELECT version FROM meta WHERE secret_id =?`
-	row := tx.QueryRowContext(ctx, query, id.String())
+	row := tx.QueryRowContext(ctx, query, secret_id.String())
 	var version sql.NullInt64
 	err = row.Scan(&version)
 	if err != nil {
@@ -210,25 +213,25 @@ func (s *storageDB) DeleteSecret(ctx context.Context, id uuid.UUID) error {
 	} else {
 		query = `DELETE FROM actions WHERE secret_id=?`
 	}
-	_, err = tx.ExecContext(ctx, query, id.String(), DeleteAction)
+	_, err = tx.ExecContext(ctx, query, secret_id.String(), DeleteAction)
 	if err != nil {
 		return nil
 	}
 
 	query = `DELETE FROM secrets WHERE id=?`
-	_, err = tx.ExecContext(ctx, query, id.String())
+	_, err = tx.ExecContext(ctx, query, secret_id.String())
 	if err != nil {
 		return err
 	}
 
 	query = `DELETE FROM meta WHERE secret_id=?`
-	_, err = tx.ExecContext(ctx, query, id.String())
+	_, err = tx.ExecContext(ctx, query, secret_id.String())
 	if err != nil {
 		return err
 	}
 
 	query = `DELETE FROM data WHERE secret_id=?`
-	_, err = tx.ExecContext(ctx, query, id.String())
+	_, err = tx.ExecContext(ctx, query, secret_id.String())
 	if err != nil {
 		return err
 	}
@@ -236,19 +239,21 @@ func (s *storageDB) DeleteSecret(ctx context.Context, id uuid.UUID) error {
 	return tx.Commit()
 }
 
-func (s *storageDB) GetSecretsIDsForCreate(ctx context.Context) ([]int64, error) {
-	list := make([]int64, 0, 10)
-	query := `SELECT s.id
-	FROM secrets as s 
-	WHERE s.id < 0`
-	rows, err := s.db.QueryContext(ctx, query)
+// For sync
+func (s *storageDB) GetSecretsIDsForCreate(ctx context.Context) ([]uuid.UUID, error) {
+	query := `SELECT secret_id
+	FROM actions 
+	WHERE action_type = ? and conflict = 0`
+	rows, err := s.db.QueryContext(ctx, query, CreateAction)
 	if err != nil {
 		return nil, err
 	}
 	// обязательно закрываем перед возвратом функции
 	defer rows.Close()
+
+	list := make([]uuid.UUID, 0, 10)
 	for rows.Next() {
-		var id int64
+		var id uuid.UUID
 		err = rows.Scan(&id)
 		if err != nil {
 			return nil, err
@@ -264,25 +269,25 @@ func (s *storageDB) GetSecretsIDsForCreate(ctx context.Context) ([]int64, error)
 
 }
 
-func (s *storageDB) GetSecretForCreate(ctx context.Context, id int64) (*models.SecretDBCreateServer, error) {
+func (s *storageDB) GetSecretForCreate(ctx context.Context, secret_id uuid.UUID) (*models.SecretDBCreateServer, error) {
 	query := `SELECT s.id, s.type,
-	m.id as meta_id, m.updated_at as meta_updated, m."data" as meta,
-	d.id as data_id, d.updated_at as data_updated, d."data"
+	m.updated_at as meta_updated, m."data" as meta,
+	d.updated_at as data_updated, d."data"
 	FROM secrets as s
 	JOIN meta as m ON m.secret_id = s.id
 	JOIN data as d ON d.secret_id = s.id
 	WHERE s.id = ?`
-	row := s.db.QueryRowContext(ctx, query, id)
+	row := s.db.QueryRowContext(ctx, query, secret_id.String())
 	item := &models.SecretDBCreateServer{}
-	err := row.Scan(&item.ID, &item.Type, &item.MetaID, &item.MetaUpdated, &item.Meta, &item.DataID, &item.DataUpdated, &item.Data)
+	err := row.Scan(&item.ID, &item.Type, &item.MetaUpdated, &item.Meta, &item.DataUpdated, &item.Data)
 	if err != nil {
 		return nil, err
 	}
 	return item, nil
 }
 
-// MoveSecret обновляет локальные id(отрицательные) на id полученные с сервера(положительные)
-func (s *storageDB) MoveSecret(ctx context.Context, data *pb.CreateSecretResponse) error {
+// UpdateSecretVersionAfterCreate выставляет версию и чистит таблицу actions
+func (s *storageDB) UpdateSecretVersionAfterCreate(ctx context.Context, secret_id uuid.UUID, conflict bool) error {
 	// начинаем транзакцию
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -290,20 +295,30 @@ func (s *storageDB) MoveSecret(ctx context.Context, data *pb.CreateSecretRespons
 	}
 	defer tx.Rollback()
 
-	query := `UPDATE secrets SET id=? WHERE id=?`
-	_, err = s.db.ExecContext(ctx, query, data.Secret.Secret.ServerId, data.Secret.Secret.Id)
+	if conflict {
+		logger.Logger.Debug("after create: update actions on conflict")
+		query := `UPDATE actions SET conflict=1 WHERE secret_id=?`
+		_, err = tx.ExecContext(ctx, query, secret_id.String())
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	query := `UPDATE meta SET version=0, need_update=0 WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, secret_id.String())
 	if err != nil {
 		return err
 	}
 
-	query = `UPDATE meta SET id=?, secret_id=?, version=0 WHERE id=?`
-	_, err = s.db.ExecContext(ctx, query, data.Secret.Meta.ServerId, data.Secret.Secret.ServerId, data.Secret.Meta.Id)
+	query = `UPDATE data SET version=0, need_update=0 WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, secret_id.String())
 	if err != nil {
 		return err
 	}
 
-	query = `UPDATE data SET id=?, secret_id=?, version=0 WHERE id=?`
-	_, err = s.db.ExecContext(ctx, query, data.Secret.Data.ServerId, data.Secret.Secret.ServerId, data.Secret.Data.Id)
+	query = `DELETE FROM actions WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, secret_id.String())
 	if err != nil {
 		return err
 	}
@@ -311,21 +326,20 @@ func (s *storageDB) MoveSecret(ctx context.Context, data *pb.CreateSecretRespons
 	return tx.Commit()
 }
 
-func (s *storageDB) GetSecretsIDsForServerUpdate(ctx context.Context) ([]int64, error) {
-	list := make([]int64, 0, 10)
-	query := `SELECT m.secret_id
-	FROM meta as m
-	JOIN data as d ON d.secret_id = m.secret_id
-	WHERE m.need_update = 1 or d.need_update = 1`
-	rows, err := s.db.QueryContext(ctx, query)
+func (s *storageDB) GetSecretsIDsForServerUpdate(ctx context.Context) ([]uuid.UUID, error) {
+	query := `SELECT secret_id
+	FROM actions 
+	WHERE action_type = ? and conflict = 0`
+	rows, err := s.db.QueryContext(ctx, query, UpdateAction)
 	if err != nil {
 		return nil, err
 	}
 	// обязательно закрываем перед возвратом функции
 	defer rows.Close()
 
+	list := make([]uuid.UUID, 0, 10)
 	for rows.Next() {
-		var id int64
+		var id uuid.UUID
 		err = rows.Scan(&id)
 		if err != nil {
 			return nil, err
@@ -340,45 +354,45 @@ func (s *storageDB) GetSecretsIDsForServerUpdate(ctx context.Context) ([]int64, 
 	return list, nil
 }
 
-func (s *storageDB) GetSecretForUpdate(ctx context.Context, id int64) (*models.SecretDBUpdateServer, error) {
+func (s *storageDB) GetSecretForUpdate(ctx context.Context, secret_id uuid.UUID) (*models.SecretDBUpdateServer, error) {
 	query := `SELECT s.id, s.type,
-	m.id as meta_id, m.updated_at as meta_updated, m.version as meta_version, m."data" as meta,
-	d.id as data_id, d.updated_at as data_updated, d.version as data_version, d."data"
+	m.updated_at as meta_updated, m.version as meta_version, m."data" as meta,
+	d.updated_at as data_updated, d.version as data_version, d."data"
 	FROM secrets as s
 	LEFT JOIN meta as m ON m.secret_id = s.id and m.need_update = 1
 	LEFT JOIN data as d ON d.secret_id = s.id and d.need_update = 1
 	WHERE s.id = ?`
-	row := s.db.QueryRowContext(ctx, query, id)
+	row := s.db.QueryRowContext(ctx, query, secret_id)
 	item := &models.SecretDBUpdateServer{}
 	var (
-		metaID      sql.NullInt64
 		metaUpdated sql.NullInt64
 		metaVersion sql.NullInt64
 		meta        []byte
 
-		dataID      sql.NullInt64
 		dataUpdated sql.NullInt64
 		dataVersion sql.NullInt64
 		data        []byte
 	)
 	err := row.Scan(&item.ID, &item.Type,
-		&metaID, &metaUpdated, &metaVersion, &meta,
-		&dataID, &dataUpdated, &dataVersion, &data)
+		&metaUpdated, &metaVersion, &meta,
+		&dataUpdated, &dataVersion, &data)
 	if err != nil {
 		return nil, err
 	}
 
-	if metaID.Valid {
+	if !metaUpdated.Valid && !dataUpdated.Valid {
+		return nil, ErrMetaAndDataEmpty
+	}
+
+	if metaUpdated.Valid {
 		item.Meta = &models.SecretDBUpdateServerBlock{
-			ID:      metaID.Int64,
 			Updated: metaUpdated.Int64,
 			Version: metaVersion.Int64,
 			Data:    meta,
 		}
 	}
-	if dataID.Valid {
+	if dataUpdated.Valid {
 		item.Data = &models.SecretDBUpdateServerBlock{
-			ID:      dataID.Int64,
 			Updated: dataUpdated.Int64,
 			Version: dataVersion.Int64,
 			Data:    data,
@@ -387,8 +401,8 @@ func (s *storageDB) GetSecretForUpdate(ctx context.Context, id int64) (*models.S
 	return item, nil
 }
 
-// UpdateSecretVersion обновляет версию и сбрасываею флаг need_update
-func (s *storageDB) UpdateSecretVersion(ctx context.Context, data *pb.UpdateSecretResponse) error {
+// UpdateSecretVersionAfterUpdate обновляет версию и сбрасываею флаг need_update
+func (s *storageDB) UpdateSecretVersionAfterUpdate(ctx context.Context, resp *pb.UpdateSecretResponse) error {
 	// начинаем транзакцию
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -396,23 +410,42 @@ func (s *storageDB) UpdateSecretVersion(ctx context.Context, data *pb.UpdateSecr
 	}
 	defer tx.Rollback()
 
-	if data.Secret.Meta != nil {
-		query := `UPDATE meta SET version=?, need_update=0 WHERE id=?`
-		sqlRes, err := tx.ExecContext(ctx, query, data.Secret.Meta.Version, data.Secret.Meta.Id)
+	if resp.Conflict {
+		logger.Logger.Debug("after update: update actions on conflict")
+		query := `UPDATE actions SET conflict=1 WHERE secret_id=?`
+		_, err = tx.ExecContext(ctx, query, resp.Id)
 		if err != nil {
 			return err
 		}
-		i, _ := sqlRes.RowsAffected()
-		logger.Logger.Debug("update version", slog.Int64("meta_id", data.Secret.Meta.Id), slog.Bool("updated", i != 0))
+		return nil
 	}
-	if data.Secret.Data != nil {
-		query := `UPDATE data SET version=?, need_update=0 WHERE id=?`
-		sqlRes, err := tx.ExecContext(ctx, query, data.Secret.Data.Version, data.Secret.Data.Id)
+
+	if resp.Meta != nil {
+		logger.Logger.Debug("after update: update meta")
+		query := `UPDATE meta SET version=?, need_update=0 WHERE secret_id=?`
+		sqlRes, err := tx.ExecContext(ctx, query, resp.Meta.Version, resp.Id)
 		if err != nil {
 			return err
 		}
 		i, _ := sqlRes.RowsAffected()
-		logger.Logger.Debug("update version", slog.Int64("data_id", data.Secret.Meta.Id), slog.Bool("updated", i != 0))
+		logger.Logger.Debug("update meta version", slog.String("secret_id", resp.Id), slog.Bool("updated", i != 0))
+	}
+	if resp.Data != nil {
+		logger.Logger.Debug("after update: update data")
+		query := `UPDATE data SET version=?, need_update=0 WHERE secret_id=?`
+		sqlRes, err := tx.ExecContext(ctx, query, resp.Data.Version, resp.Id)
+		if err != nil {
+			return err
+		}
+		i, _ := sqlRes.RowsAffected()
+		logger.Logger.Debug("update data version", slog.String("secret_id", resp.Id), slog.Bool("updated", i != 0))
+	}
+
+	logger.Logger.Debug("after update: delete actions")
+	query := `DELETE FROM actions WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, resp.Id)
+	if err != nil {
+		return err
 	}
 
 	return tx.Commit()

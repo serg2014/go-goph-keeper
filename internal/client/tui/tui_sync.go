@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/serg2014/go-goph-keeper/internal/client/app"
+	"github.com/serg2014/go-goph-keeper/internal/client/logger"
 )
 
 var (
@@ -167,20 +168,11 @@ func tuiFormSyncRealTime(syncStatus *app.SyncStatus, errString string) *huh.Form
 		desc = errString
 	}
 
+	logger.Logger.Info(fmt.Sprintf("syncStatus: %v", syncStatus))
 	conflicted := ""
 	conflictedBuilder := strings.Builder{}
 	for _, item := range syncStatus.Conflicted {
-		conflictedBuilder.WriteString(fmt.Sprintf("Secret id: %d\n", item.SecretID))
-		if item.Meta != nil {
-			conflictedBuilder.WriteString("Meta:\n")
-			conflictedBuilder.WriteString(fmt.Sprintf("  localVersion: %d\n", item.Meta.LocalVersion))
-			conflictedBuilder.WriteString(fmt.Sprintf("  remoreVersion: %d\n", item.Meta.RemoteVersion))
-		}
-		if item.Data != nil {
-			conflictedBuilder.WriteString("Data:\n")
-			conflictedBuilder.WriteString(fmt.Sprintf("  localVersion: %d\n", item.Data.LocalVersion))
-			conflictedBuilder.WriteString(fmt.Sprintf("  remoreVersion: %d\n", item.Data.RemoteVersion))
-		}
+		conflictedBuilder.WriteString(fmt.Sprintf("Secret id: %s\n", item.String()))
 	}
 	if conflictedBuilder.Len() != 0 {
 		conflicted = conflictedBuilder.String()
