@@ -27,6 +27,7 @@ type GrpcServer struct {
 }
 
 func (s *GrpcServer) Ping(ctx context.Context, request *pb.PingRequest) (*pb.PingResponse, error) {
+	logger.RPCLogger.Debug("call Ping")
 	err := s.app.Ping(ctx)
 	if err != nil {
 		return nil, err
@@ -35,6 +36,7 @@ func (s *GrpcServer) Ping(ctx context.Context, request *pb.PingRequest) (*pb.Pin
 }
 
 func (s *GrpcServer) CreateSecrets(stream grpc.BidiStreamingServer[pb.CreateSecretRequest, pb.CreateSecretResponse]) error {
+	logger.RPCLogger.Debug("call CreateSecrets")
 	for {
 		ctx := stream.Context()
 		req, err := stream.Recv()
@@ -70,6 +72,7 @@ func (s *GrpcServer) CreateSecrets(stream grpc.BidiStreamingServer[pb.CreateSecr
 }
 
 func (s *GrpcServer) UpdateSecrets(stream grpc.BidiStreamingServer[pb.UpdateSecretRequest, pb.UpdateSecretResponse]) error {
+	logger.RPCLogger.Debug("call UpdateSecrets")
 	for {
 		ctx := stream.Context()
 		req, err := stream.Recv()
@@ -106,6 +109,7 @@ func (s *GrpcServer) UpdateSecrets(stream grpc.BidiStreamingServer[pb.UpdateSecr
 }
 
 func (s *GrpcServer) DeleteSecrets(stream grpc.BidiStreamingServer[pb.DeleteSecretRequest, pb.DeleteSecretResponse]) error {
+	logger.RPCLogger.Debug("call DeleteSecrets")
 	for {
 		ctx := stream.Context()
 		req, err := stream.Recv()
@@ -133,6 +137,7 @@ func (s *GrpcServer) DeleteSecrets(stream grpc.BidiStreamingServer[pb.DeleteSecr
 }
 
 func (s *GrpcServer) SecretsListInfo(request *pb.SecretsListRequest, srv grpc.ServerStreamingServer[pb.SecretsListResponse]) error {
+	logger.RPCLogger.Debug("call SecretsListInfo")
 	ctx := srv.Context()
 	list, err := s.app.GetSecretsListInfo(ctx)
 	if err != nil {
@@ -147,6 +152,7 @@ func (s *GrpcServer) SecretsListInfo(request *pb.SecretsListRequest, srv grpc.Se
 }
 
 func (s *GrpcServer) GetSecrets(stream grpc.BidiStreamingServer[pb.GetSecretsRequest, pb.GetSecretsResponse]) error {
+	logger.RPCLogger.Debug("call GetSecrets")
 	for {
 		ctx := stream.Context()
 		req, err := stream.Recv()

@@ -163,7 +163,7 @@ func (app *ClientApp) createSecretsWithRetry(ctx context.Context, stream grpc.Bi
 			logger.RPCLogger.Debug(fmt.Sprintf("Recv get error: %v", err))
 		}
 		if err == io.EOF {
-			logger.RPCLogger.Debug("no more responses")
+			logger.RPCLogger.Debug("createSecretsWithRetry: no more responses")
 			err = nil
 		}
 		if errors.Is(err, auth.ErrNeedRetry) {
@@ -197,6 +197,7 @@ func (app *ClientApp) syncUpdateSecretOnServer(ctx context.Context, syncStatus *
 	if err != nil {
 		return err
 	}
+
 	for _, secret_id := range list {
 		logger.Logger.Debug(fmt.Sprintf("try update secret id: %s", secret_id.String()))
 		// получить данные по секрету
@@ -279,7 +280,7 @@ func (app *ClientApp) updateSecretsWithRetry(
 			logger.RPCLogger.Debug(fmt.Sprintf("Recv get error: %v", err))
 		}
 		if err == io.EOF {
-			logger.RPCLogger.Debug("no more responses")
+			logger.RPCLogger.Debug("updateSecretsWithRetry: no more responses")
 			err = nil
 		}
 		if errors.Is(err, auth.ErrNeedRetry) {
@@ -377,7 +378,7 @@ func (app *ClientApp) deleteSecretsWithRetry(
 			logger.RPCLogger.Debug(fmt.Sprintf("Recv get error: %v", err))
 		}
 		if err == io.EOF {
-			logger.RPCLogger.Debug("no more responses")
+			logger.RPCLogger.Debug("deleteSecretsWithRetry: no more responses")
 			err = nil
 		}
 		if errors.Is(err, auth.ErrNeedRetry) {
@@ -462,7 +463,7 @@ func (app *ClientApp) secretsListInfoWithRetry(ctx context.Context) (models.Secr
 				logger.RPCLogger.Debug(fmt.Sprintf("Recv get error: %v", err))
 			}
 			if err == io.EOF {
-				logger.RPCLogger.Debug(fmt.Sprintf("no more responses. resp: %v", resp))
+				logger.RPCLogger.Debug(fmt.Sprintf("secretsListInfoWithRetry: no more responses. resp: %v", resp))
 				return serverInfo, nil
 			}
 			if errors.Is(err, auth.ErrNeedRetry) {
@@ -485,6 +486,7 @@ func (app *ClientApp) secretsListInfoWithRetry(ctx context.Context) (models.Secr
 
 func (app *ClientApp) createSecretFromServer(ctx context.Context, info *pb.SecretsListResponse) error {
 	// Устанавливаем соединение стрима
+	logger.Logger.Debug("connect to grpc GetSecrets")
 	stream, err := app.grpcKeep.GetSecrets(ctx)
 	if err != nil {
 		return err
@@ -533,7 +535,7 @@ func (app *ClientApp) getSecretsWithRetry(
 			logger.RPCLogger.Debug(fmt.Sprintf("Recv get error: %v", err))
 		}
 		if err == io.EOF {
-			logger.RPCLogger.Debug("no more responses")
+			logger.RPCLogger.Debug("getSecretsWithRetry: no more responses")
 			err = nil
 		}
 		if errors.Is(err, auth.ErrNeedRetry) {
@@ -546,12 +548,13 @@ func (app *ClientApp) getSecretsWithRetry(
 		return res, nil
 	}
 
-	logger.RPCLogger.Debug(fmt.Sprintf("updateSecretsWithRetry error: %v", err))
+	logger.RPCLogger.Debug(fmt.Sprintf("getSecretsWithRetry error: %v", err))
 	return nil, err
 }
 
 func (app *ClientApp) updateSecretFromServer(ctx context.Context, info *pb.SecretsListResponse) error {
 	// Устанавливаем соединение стрима
+	logger.Logger.Debug("connect to grpc GetSecrets")
 	stream, err := app.grpcKeep.GetSecrets(ctx)
 	if err != nil {
 		return err

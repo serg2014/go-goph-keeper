@@ -94,10 +94,12 @@ func run() error {
 	authFn := func(ctx context.Context) (context.Context, error) {
 		token, err := authinterceptors.AuthFromMD(ctx, "bearer")
 		if err != nil {
+			logger.RPCLogger.Debug("in auth interceptor no header")
 			return nil, err
 		}
 		userID, isRefresh, err := auth.GetUserIDFromToken(token)
 		if err != nil || isRefresh {
+			logger.RPCLogger.Debug("in auth interceptor bad header")
 			if errors.Is(err, auth.ErrTokenExpired) {
 				return nil, status.Error(codes.Unauthenticated, "expired token")
 			}

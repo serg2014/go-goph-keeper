@@ -83,8 +83,13 @@ func (app *ClientApp) uploadFile(ctx context.Context, stream grpc.BidiStreamingC
 					break // переходим к следующей попытке
 				}
 				// io.EOF тут невозможен в нормальной ситуации
-				return fmt.Errorf("cannot send stream request: %v", err)
-
+				// io.EOF возможен на первом Send, когда сервер закрыл соединение раньше чем клиент сделал Send
+				// например при проверка авторизации
+				// в остальных случаях это сетевые ошибки.
+				// игнорируем их, получим ошибку из Recv
+				if !errors.Is(err, io.EOF) {
+					return fmt.Errorf("cannot send stream request: %v", err)
+				}
 			}
 			buf.Reset()
 
@@ -171,9 +176,13 @@ func (app *ClientApp) uploadFileForUpdate(ctx context.Context, stream grpc.BidiS
 					break // переходим к следующей попытке
 				}
 				// io.EOF тут невозможен в нормальной ситуации
-				// TODO все таки возможен, но не понятно как
-				return fmt.Errorf("cannot send stream request: %v", err)
-
+				// io.EOF возможен на первом Send, когда сервер закрыл соединение раньше чем клиент сделал Send
+				// например при проверка авторизации
+				// в остальных случаях это сетевые ошибки.
+				// игнорируем их, получим ошибку из Recv
+				if !errors.Is(err, io.EOF) {
+					return fmt.Errorf("cannot send stream request: %v", err)
+				}
 			}
 			buf.Reset()
 
