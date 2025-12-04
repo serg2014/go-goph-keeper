@@ -552,8 +552,10 @@ func (s *storageDB) UpdateSecretAfterDelete(ctx context.Context, resp *pb.Delete
 func (s *storageDB) SecretsListInfo(ctx context.Context) (models.SecretListInfo, error) {
 	query := `SELECT m.secret_id, m.version as meta_version, d.version as data_version
 	FROM meta as m
-	JOIN data as d ON d.secret_id = m.secret_id`
-	rows, err := s.db.QueryContext(ctx, query)
+	JOIN data as d ON d.secret_id = m.secret_id
+	LEFT JOIN actions as a ON a.secret_id = d.secret_id 
+	WHERE a.secret_id isnull or a.action_type != ?`
+	rows, err := s.db.QueryContext(ctx, query, DeleteAction)
 	if err != nil {
 		return nil, err
 	}
@@ -652,21 +654,33 @@ func (s *storageDB) ForceCreateSecret(ctx context.Context, resp *pb.GetSecretsRe
 	}
 	defer tx.Rollback()
 
-	query := `INSERT INTO secrets (id, type) VALUES(?,?)`
+	query := `INSERT INTO secrets (id, type) VALUES(?,?)
+	ON CONFLICT (id) DO UPDATE
+	SET type = EXCLUDED.type`
 	// TODO
 	_, err = tx.ExecContext(ctx, query, resp.Id, resp.Type)
 	if err != nil {
 		return err
 	}
 
-	query = `INSERT INTO meta (secret_id, version, updated_at, data) VALUES(?,?,?,?)`
-	_, err = tx.ExecContext(ctx, query, resp.Id, resp.Meta.Version, resp.Meta.UpdatedAt, resp.Meta.Data)
+	query = `INSERT INTO meta (secret_id, version, updated_at, need_update, data) VALUES(?,?,?,?,?)
+	ON CONFLICT (secret_id) DO UPDATE
+	SET version = EXCLUDED.version, updated_at=EXCLUDED.updated_at, need_update=EXCLUDED.need_update, data=EXCLUDED.data`
+	_, err = tx.ExecContext(ctx, query, resp.Id, resp.Meta.Version, resp.Meta.UpdatedAt, 0, resp.Meta.Data)
 	if err != nil {
 		return err
 	}
 
-	query = `INSERT INTO data (secret_id, version, updated_at, data) VALUES(?,?,?,?)`
-	_, err = tx.ExecContext(ctx, query, resp.Id, resp.Data.Version, resp.Data.UpdatedAt, resp.Data.Data)
+	query = `INSERT INTO data (secret_id, version, updated_at, need_update, data) VALUES(?,?,?,?,?)
+	ON CONFLICT (secret_id) DO UPDATE
+	SET version = EXCLUDED.version, updated_at=EXCLUDED.updated_at, need_update=EXCLUDED.need_update, data=EXCLUDED.data`
+	_, err = tx.ExecContext(ctx, query, resp.Id, resp.Data.Version, resp.Data.UpdatedAt, 0, resp.Data.Data)
+	if err != nil {
+		return err
+	}
+
+	query = `DELETE FROM actions WHERE secret_id=?`
+	_, err = tx.ExecContext(ctx, query, resp.Id)
 	if err != nil {
 		return err
 	}
@@ -682,16 +696,16 @@ func (s *storageDB) ForceUpdateSecret(ctx context.Context, resp *pb.GetSecretsRe
 	}
 	defer tx.Rollback()
 
-	query := `UPDATE meta SET version=?, updated_at=?, data=?
+	query := `UPDATE meta SET version=?, updated_at=?, need_update=?, data=?
 	WHERE secret_id=?`
-	_, err = tx.ExecContext(ctx, query, resp.Meta.Version, resp.Meta.UpdatedAt, resp.Meta.Data, resp.Id)
+	_, err = tx.ExecContext(ctx, query, resp.Meta.Version, resp.Meta.UpdatedAt, 0, resp.Meta.Data, resp.Id)
 	if err != nil {
 		return err
 	}
 
-	query = `UPDATE data SET version=?, updated_at=?, data=?
+	query = `UPDATE data SET version=?, updated_at=?, need_update=?, data=?
 	WHERE secret_id=?`
-	_, err = tx.ExecContext(ctx, query, resp.Data.Version, resp.Data.UpdatedAt, resp.Data.Data, resp.Id)
+	_, err = tx.ExecContext(ctx, query, resp.Data.Version, resp.Data.UpdatedAt, 0, resp.Data.Data, resp.Id)
 	if err != nil {
 		return err
 	}
@@ -704,35 +718,3 @@ func (s *storageDB) ForceUpdateSecret(ctx context.Context, resp *pb.GetSecretsRe
 
 	return tx.Commit()
 }
-
-// func (s *storageDB) GetSecretsForCreate(ctx context.Context) ([]*models.SecretDBCreateServer, error) {
-// 	list := make([]*models.SecretDBCreateServer, 0, 10)
-// 	query := `SELECT s.id, s.type,
-// 	m.id as meta_id, m.updated_at as meta_updated, m."data" as meta,
-// 	d.id as data_id, d.updated_at as data_updated, d."data"
-// 	FROM secrets as s
-// 	JOIN meta as m ON m.secret_id = s.id
-// 	JOIN data as d ON d.secret_id = s.id
-// 	WHERE s.id < 0
-// 	LIMIT 10`
-// 	rows, err := s.db.QueryContext(ctx, query)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	// обязательно закрываем перед возвратом функции
-// 	defer rows.Close()
-// 	for rows.Next() {
-// 		var item models.SecretDBCreateServer
-// 		err = rows.Scan(&item.ID, &item.Type, &item.MetaID, &item.MetaUpdated, &item.Meta, &item.DataID, &item.DataUpdated, &item.Data)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		list = append(list, &item)
-// 	}
-// 	// проверяем на ошибки
-// 	err = rows.Err()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return list, nil
-// }
