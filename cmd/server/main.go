@@ -83,7 +83,7 @@ func run() error {
 	// TODO путь из конфига
 	path, err := os.Getwd()
 	if err != nil {
-		return nil
+		return err
 	}
 	tlsCreds, err := generateTLSCreds(path)
 	if err != nil {

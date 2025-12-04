@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
@@ -36,9 +37,9 @@ var bufPool = sync.Pool{
 
 func (app *ClientApp) Sync(ctx context.Context) (*SyncStatus, []error) {
 	/*
-	* 1. Удаляем секреты на сервере
-	* 2. Создаем секреты на сервере (все записи с отрицательными ключами)
-	* 3. Обновляем секреты на сервере
+	* 1. Создаем секреты на сервере
+	* 2. Обновляем секреты на сервере
+	* 3. Удаляем секреты на сервере
 	* 4. Получаем обновления с сервера и просто перезатираем значениями из сервера
 	*   1. создаем секреты локально
 	*   2. удаляем секреты локально
@@ -51,12 +52,15 @@ func (app *ClientApp) Sync(ctx context.Context) (*SyncStatus, []error) {
 
 	err := app.syncCreateSecretOnServer(ctx, syncStatus)
 	errorList = append(errorList, err)
+	time.Sleep(100 * time.Microsecond)
 
 	err = app.syncUpdateSecretOnServer(ctx, syncStatus)
 	errorList = append(errorList, err)
+	time.Sleep(100 * time.Microsecond)
 
 	err = app.syncDeleteSecretOnServer(ctx, syncStatus)
 	errorList = append(errorList, err)
+	time.Sleep(100 * time.Microsecond)
 
 	err = app.syncFromServer(ctx, syncStatus)
 	errorList = append(errorList, err)
@@ -68,16 +72,19 @@ func (app *ClientApp) Sync(ctx context.Context) (*SyncStatus, []error) {
 func (app *ClientApp) syncCreateSecretOnServer(ctx context.Context, syncStatus *SyncStatus) error {
 	list, err := app.store.GetSecretsIDsForCreate(ctx)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// Устанавливаем соединение стрима
+	logger.Logger.Debug("connect to grpc CreateSecrets")
 	stream, err := app.grpcKeep.CreateSecrets(ctx)
 	if err != nil {
 		return err
 	}
 
 	for _, secret_id := range list {
+		logger.Logger.Debug(fmt.Sprintf("try create secret id: %s", secret_id.String()))
+
 		// получить данные по секрету
 		secret, err := app.store.GetSecretForCreate(ctx, secret_id)
 		if err != nil {
@@ -177,10 +184,11 @@ func (app *ClientApp) createSecretsWithRetry(ctx context.Context, stream grpc.Bi
 func (app *ClientApp) syncUpdateSecretOnServer(ctx context.Context, syncStatus *SyncStatus) error {
 	list, err := app.store.GetSecretsIDsForServerUpdate(ctx)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// Устанавливаем соединение стрима
+	logger.Logger.Debug("connect to grpc UpdateSecrets")
 	stream, err := app.grpcKeep.UpdateSecrets(ctx)
 	if err != nil {
 		return err
@@ -288,10 +296,11 @@ func (app *ClientApp) updateSecretsWithRetry(
 func (app *ClientApp) syncDeleteSecretOnServer(ctx context.Context, syncStatus *SyncStatus) error {
 	list, err := app.store.GetSecretsIDsForServerDelete(ctx)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// Устанавливаем соединение стрима
+	logger.Logger.Debug("connect to grpc DeleteSecrets")
 	stream, err := app.grpcKeep.DeleteSecrets(ctx)
 	if err != nil {
 		return err
@@ -426,9 +435,11 @@ func (app *ClientApp) syncFromServer(ctx context.Context, syncStatus *SyncStatus
 
 func (app *ClientApp) secretsListInfoWithRetry(ctx context.Context) (models.SecretListInfo, error) {
 	var err error
+	var stream grpc.ServerStreamingClient[pb.SecretsListResponse]
+
 	for range maxRetries {
-		var stream grpc.ServerStreamingClient[pb.SecretsListResponse]
 		// Устанавливаем соединение стрима
+		logger.Logger.Debug("connect to grpc SecretsListInfo")
 		stream, err = app.grpcKeep.SecretsListInfo(ctx, &pb.SecretsListRequest{})
 		if err != nil {
 			logger.RPCLogger.Debug(fmt.Sprintf("SecretsListInfo err: %v", err))
@@ -459,6 +470,7 @@ func (app *ClientApp) secretsListInfoWithRetry(ctx context.Context) (models.Secr
 		}
 	}
 
+	stream.CloseSend()
 	logger.RPCLogger.Debug(fmt.Sprintf("secretsListInfoWithRetry error: %v", err))
 	return nil, err
 }

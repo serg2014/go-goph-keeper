@@ -101,7 +101,7 @@ func (s *storageDB) UpdateSecret(ctx context.Context, secretDB *models.SecretDB)
 	ON CONFLICT (secret_id) DO NOTHING`
 	_, err = tx.ExecContext(ctx, query, secretDB.ID.String(), UpdateAction)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	return tx.Commit()
@@ -124,7 +124,7 @@ func (s *storageDB) AddSecret(ctx context.Context, secretDB *models.SecretDB) er
 	query = `INSERT INTO meta (secret_id, data) VALUES(?,?)`
 	_, err = tx.ExecContext(ctx, query, secretDB.ID.String(), secretDB.Meta)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	query = `INSERT INTO data (secret_id, data) VALUES(?,?)`
@@ -136,7 +136,7 @@ func (s *storageDB) AddSecret(ctx context.Context, secretDB *models.SecretDB) er
 	query = `INSERT INTO actions (secret_id, action_type) VALUES(?,?)`
 	_, err = tx.ExecContext(ctx, query, secretDB.ID.String(), CreateAction)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	return tx.Commit()
@@ -222,7 +222,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, secret_id uuid.UUID) error
 	query = `DELETE FROM actions WHERE secret_id=?`
 	_, err = tx.ExecContext(ctx, query, secret_id.String(), DeleteAction)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	query = `DELETE FROM secrets WHERE id=?`
