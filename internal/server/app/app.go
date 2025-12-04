@@ -2,20 +2,29 @@ package app
 
 import (
 	"context"
+	"errors"
+	"sync"
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/server/auth"
+	"github.com/serg2014/go-goph-keeper/internal/server/config"
 	"github.com/serg2014/go-goph-keeper/internal/server/models"
 	"github.com/serg2014/go-goph-keeper/internal/server/storage"
 )
 
 type MyApp struct {
-	store storage.Storager
+	store         storage.Storager
+	config        *config.Config
+	activeUploads map[string]struct{}
+	mapMutex      sync.Mutex
 }
 
-func NewApp(store storage.Storager) *MyApp {
+func NewApp(store storage.Storager, conf *config.Config) *MyApp {
 	return &MyApp{
-		store: store,
+		store:         store,
+		config:        conf,
+		activeUploads: make(map[string]struct{}),
+		mapMutex:      sync.Mutex{},
 	}
 }
 
@@ -52,7 +61,28 @@ func (app *MyApp) DeleteSecret(ctx context.Context, req *pb.DeleteSecretRequest)
 	if err != nil {
 		return nil, err
 	}
-	return app.store.DeleteSecret(ctx, *userID, req)
+
+	if req.IsFile {
+		// если файл уже загружается выходим
+		if !app.getUploadFlag(req.Id) {
+			return nil, ErrFileUploading
+		}
+		defer app.cleanUploadFlag(req.Id)
+	}
+
+	res, err := app.store.DeleteSecret(ctx, *userID, req)
+	if err != nil && !errors.Is(err, storage.ErrConflict) {
+		return nil, err
+	}
+
+	if req.IsFile && !errors.Is(err, storage.ErrConflict) {
+		err := app.deleteSecretFile(userID, req.Id)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return res, nil
 }
 
 func (app *MyApp) GetSecretsListInfo(ctx context.Context) ([]*pb.SecretsListResponse, error) {

@@ -3,12 +3,3 @@ CREATE TABLE IF NOT EXISTS secrets (
     type integer NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS secrets_type (
-    id integer NOT NULL PRIMARY KEY,
-    type text(255) NOT NULL
-);
-
-INSERT INTO secrets_type (id, type) VALUES(0, 'login_password');
-INSERT INTO secrets_type (id, type) VALUES(1, 'credit_card');
-INSERT INTO secrets_type (id, type) VALUES(2, 'text');
-INSERT INTO secrets_type (id, type) VALUES(3, 'file');

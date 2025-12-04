@@ -1,10 +1,12 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/google/uuid"
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
@@ -26,16 +28,22 @@ type Status struct {
 	Deleted int
 }
 
+var bufPool = sync.Pool{
+	New: func() any {
+		return &bytes.Buffer{}
+	},
+}
+
 func (app *ClientApp) Sync(ctx context.Context) (*SyncStatus, []error) {
 	/*
-		* 1. Удаляем секреты на сервере
-		* 2. Создаем секреты на сервере (все записи с отрицательными ключами)
-		* 3. Обновляем секреты на сервере
-		4. Получаем обновления с сервера и обновляем секреты локально
-		5. Получаем обновления с сервера и удаляем секреты локально
-		6. Получаем обновления с сервера и создаем секреты локально
-		7. Решаем конфликты. Просто перезатираем значениями из сервера
-	*/
+	* 1. Удаляем секреты на сервере
+	* 2. Создаем секреты на сервере (все записи с отрицательными ключами)
+	* 3. Обновляем секреты на сервере
+	* 4. Получаем обновления с сервера и просто перезатираем значениями из сервера
+	*   1. создаем секреты локально
+	*   2. удаляем секреты локально
+	*   3. обновляем секреты локально
+	 */
 	syncStatus := &SyncStatus{
 		Conflicted: make([]uuid.UUID, 0),
 	}
@@ -68,12 +76,21 @@ func (app *ClientApp) syncCreateSecretOnServer(ctx context.Context, syncStatus *
 	if err != nil {
 		return err
 	}
-	for _, id := range list {
+
+	for _, secret_id := range list {
 		// получить данные по секрету
-		secret, err := app.store.GetSecretForCreate(ctx, id)
+		secret, err := app.store.GetSecretForCreate(ctx, secret_id)
 		if err != nil {
 			return err
 		}
+
+		if secret.Type == models.SecretTypeFile {
+			err = app.uploadFile(ctx, stream, secret_id)
+			if err != nil {
+				return err
+			}
+		}
+
 		resp, err := app.createSecretsWithRetry(ctx, stream, secret)
 		if err != nil {
 			return err
@@ -102,6 +119,7 @@ func (app *ClientApp) syncCreateSecretOnServer(ctx context.Context, syncStatus *
 	stream.CloseSend()
 	return nil
 }
+
 func (app *ClientApp) createSecretsWithRetry(ctx context.Context, stream grpc.BidiStreamingClient[pb.CreateSecretRequest, pb.CreateSecretResponse], secret *models.SecretDBCreateServer) (*pb.CreateSecretResponse, error) {
 	var err error
 	for range maxRetries {
@@ -174,6 +192,14 @@ func (app *ClientApp) syncUpdateSecretOnServer(ctx context.Context, syncStatus *
 		if err != nil {
 			return err
 		}
+
+		if secret.Type == models.SecretTypeFile {
+			err = app.uploadFileForUpdate(ctx, stream, secret_id)
+			if err != nil {
+				return err
+			}
+		}
+
 		resp, err := app.updateSecretsWithRetry(ctx, stream, secret)
 		if err != nil {
 			return err
@@ -311,6 +337,7 @@ func (app *ClientApp) deleteSecretsWithRetry(
 	for range maxRetries {
 		req := &pb.DeleteSecretRequest{
 			Id:          secret.ID.String(),
+			IsFile:      secret.Type == models.SecretTypeFile,
 			MetaVersion: secret.MetaVersion,
 			DataVersion: secret.DataVersion,
 		}

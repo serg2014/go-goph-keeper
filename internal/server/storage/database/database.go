@@ -189,9 +189,9 @@ func (s *storageDB) UpdateSecret(ctx context.Context, userID models.UserID, req 
 	if req.Meta != nil {
 		query := `SELECT version
 		FROM meta
-		WHERE secret_id=$1 and user_id=$2
+		WHERE user_id=$2 and secret_id=$1
 		FOR UPDATE`
-		_, err := tx.ExecContext(ctx, query, req.Id, userID)
+		_, err := tx.ExecContext(ctx, query, userID, req.Id)
 		if err != nil {
 			// TODO сюда попадаем когда секрет на сервере был удален, а локально изменен
 			// либо нам прислали кривой секрет(попытка взлома)
@@ -230,9 +230,9 @@ func (s *storageDB) UpdateSecret(ctx context.Context, userID models.UserID, req 
 	if req.Data != nil {
 		query := `SELECT version
 		FROM data
-		WHERE secret_id=$1 and user_id=$2
+		WHERE user_id=$2 and secret_id=$1
 		FOR UPDATE`
-		_, err := tx.ExecContext(ctx, query, req.Id, userID)
+		_, err := tx.ExecContext(ctx, query, userID, req.Id)
 		if err != nil {
 			return nil, fmt.Errorf("failed update data: %w", err)
 		}
@@ -297,8 +297,8 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 		if errors.Is(err, sql.ErrNoRows) {
 			// TODO сюда попадаем когда секрет на сервере был удален раньше чем локально
 			// либо нам прислали кривой секрет(попытка взлома)
-			// ничего страшного, пусть клиент удаляет
-			return res, nil
+			// ничего страшного, пусть клиент удаляет у себя(он уже удалил)
+			return res, storage.ErrConflict
 		}
 		return nil, fmt.Errorf("delete secret. failed select for update meta and data: %w", err)
 	}
@@ -314,7 +314,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 	}
 	if ra == 0 {
 		res.Conflict = true
-		return res, nil
+		return res, storage.ErrConflict
 	}
 
 	query = `DELETE FROM data WHERE user_id=$1 and secret_id=$2 and version=$3`
@@ -328,7 +328,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 	}
 	if ra == 0 {
 		res.Conflict = true
-		return res, nil
+		return res, storage.ErrConflict
 	}
 
 	query = `DELETE FROM secrets WHERE user_id=$1 and id=$2`

@@ -26,7 +26,8 @@ type Secret struct {
 type SecretType int
 
 const (
-	SecretTypeLogingPassword SecretType = iota
+	SecretTypeUnknown SecretType = iota
+	SecretTypeLogingPassword
 	SecretTypeCreditCard
 	SecretTypeText
 	SecretTypeFile

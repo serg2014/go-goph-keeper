@@ -73,7 +73,7 @@ func run() error {
 		return err
 	}
 	defer storage.Close()
-	app := app.NewApp(storage)
+	app := app.NewApp(storage, conf)
 
 	grpcPanicRecoveryHandler := func(p any) (err error) {
 		logger.RPCLogger.Error("recovered from panic", "panic", p, "stack", debug.Stack())

@@ -46,8 +46,12 @@ func (c *CryptFile) Read(p []byte) (int, error) {
 	return c.file.Read(p)
 }
 
+func (app *ClientApp) SecretFilePath(secret_id string) string {
+	return path.Join(app.config.DataDir(), secret_id)
+}
+
 func (app *ClientApp) DeleteFileFromLocalStorage(secretID uuid.UUID) error {
-	return os.Remove(path.Join(app.config.DataDir(), secretID.String()))
+	return os.Remove(app.SecretFilePath(secretID.String()))
 }
 
 func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFileName string) error {
@@ -57,7 +61,7 @@ func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFileName stri
 	}
 	defer fileR.Close()
 
-	cryptFilePath := path.Join(app.config.DataDir(), cryptFileName)
+	cryptFilePath := app.SecretFilePath(cryptFileName)
 	fileW, err := os.OpenFile(cryptFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("%s: %w", cryptFilePath, err)
@@ -191,7 +195,7 @@ func (app *ClientApp) transformDBToData(secret *models.Secret, secretDB *models.
 			return fmt.Errorf("unmarshal secret.data: %w", err)
 		}
 		// TODO удалить
-		secret.Data.FilePath.Path = path.Join(app.config.DataDir(), secret.ID.String())
+		secret.Data.FilePath.Path = app.SecretFilePath(secret.ID.String())
 		// secret.Data.FilePath.OldPath = secret.Data.FilePath.Path
 	case models.SecretTypeText:
 		secret.Data.Text = string(secretDB.Data)

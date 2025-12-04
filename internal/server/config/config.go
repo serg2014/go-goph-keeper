@@ -6,16 +6,15 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path"
 	"strconv"
 
 	"github.com/caarlos0/env/v11"
 )
 
 const (
-	DefaultDirName = "goph-keeper-client-data"
-	DefaultLogsDir = "logs"
-	TmpDirName     = "tmp"
-	DbName         = "keeper.db"
+	DefaultDirName = "goph-keeper-server-data"
+	DataDir        = "data"
 )
 
 type Config struct {
@@ -26,6 +25,8 @@ type Config struct {
 	ServerAddress ServerAddress `env:"SERVER_ADDRESS" json:"server_address"`
 	// DatabaseDSN - dsn for connect ot database
 	DatabaseDSN string `env:"DATABASE_DSN" json:"database_dsn"`
+	// WorkingDir path to dir where data will store
+	WorkingDir string `env:"WORKING_DIR" json:"working_dir"`
 }
 
 type ServerAddress struct {
@@ -86,6 +87,9 @@ func NewConfig() (*Config, error) {
 }
 
 func (c *Config) setDefaults() error {
+	if c.WorkingDir == "" {
+		c.WorkingDir = DefaultDirName
+	}
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
@@ -103,6 +107,7 @@ func (c *Config) setDefaults() error {
 }
 
 func (c *Config) Init() error {
+	flag.StringVar(&c.WorkingDir, "w", c.WorkingDir, "working directory")
 	flag.StringVar(&c.LogLevel, "l", c.LogLevel, "log level")
 	flag.StringVar(&c.ConfigPath, "config", "", "path to config(format json)")
 	flag.Var(&c.ServerAddress, "a", "remote server address")
@@ -166,4 +171,8 @@ func getConfigFromFile(path string) (*Config, error) {
 
 	configFromFile.setDefaults()
 	return &configFromFile, nil
+}
+
+func (c *Config) DataDir() string {
+	return path.Join(c.WorkingDir, DataDir)
 }

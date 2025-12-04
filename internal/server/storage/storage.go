@@ -15,6 +15,7 @@ var (
 	ErrMetaExists       = errors.New("meta exists")
 	ErrDataExists       = errors.New("data exists")
 	ErrMetaAndDataEmpty = errors.New("meta and data emty")
+	ErrConflict         = errors.New("conflict")
 )
 
 // Storager interface

@@ -38,6 +38,7 @@ service AuthService {
 message PingRequest {}
 message PingResponse {}
 
+
 message SecretData {
     int64 updated_at = 1;
     bytes data = 2;
@@ -48,8 +49,12 @@ message Secret {
     SecretData meta = 3;
     SecretData data = 4;
 }
+message FileUpload {
+    bytes chunk = 1;
+}
 message CreateSecretRequest{
     Secret secret = 1;
+    FileUpload file = 2;
 }
 
 message CreateSecretResponse{
@@ -66,6 +71,7 @@ message UpdateSecretRequest {
     string id = 1;
     UpdateRequestInfo meta = 2;
     UpdateRequestInfo data = 3;
+    FileUpload file = 4;
 }
 
 message UpdateResponseInfo {
@@ -80,8 +86,9 @@ message UpdateSecretResponse {
 
 message DeleteSecretRequest {
     string id = 1;
-    int64 meta_version = 2;
-    int64 data_version = 3;
+    bool is_file = 2;
+    int64 meta_version = 3;
+    int64 data_version = 4;
 }
 message DeleteSecretResponse {
     string id = 1;

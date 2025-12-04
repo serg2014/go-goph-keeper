@@ -46,30 +46,21 @@ func (s *GrpcServer) CreateSecrets(stream grpc.BidiStreamingServer[pb.CreateSecr
 			return status.Errorf(code, "cannot receive stream request: %v", err)
 		}
 
-		logger.Logger.Info(fmt.Sprintf("got req: %+v", req.Secret))
+		logger.Logger.Debug(fmt.Sprintf("got req: %+v", req.Secret))
+
+		if req.File != nil {
+			// вычитываем данные файла и секрета в отдельном методе
+			err = s.app.CreateFileSecret(ctx, stream, req)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 
 		res, err := s.app.CreateSecret(ctx, req)
 		if err != nil {
 			return err
 		}
-		// res := &pb.CreateSecretResponse{
-		// 	Secret: &pb.SecretLite{
-		// 		Id:       -1,
-		// 		ServerId: 1,
-		// 		Meta: &pb.SecretDataLite{
-		// 			Id:        -1,
-		// 			ServerId:  1,
-		// 			Version:   0,
-		// 			UpdatedAt: 123,
-		// 		},
-		// 		Data: &pb.SecretDataLite{
-		// 			Id:        -1,
-		// 			ServerId:  1,
-		// 			Version:   0,
-		// 			UpdatedAt: 1234,
-		// 		},
-		// 	},
-		// }
 		err = stream.Send(res)
 		if err != nil {
 			code := codes.Unknown
@@ -91,6 +82,15 @@ func (s *GrpcServer) UpdateSecrets(stream grpc.BidiStreamingServer[pb.UpdateSecr
 		}
 
 		logger.Logger.Info(fmt.Sprintf("got req: %+v", req))
+
+		if req.File != nil {
+			// вычитываем данные файла и секрета в отдельном методе
+			err = s.app.UpdateFileSecret(ctx, stream, req)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 
 		res, err := s.app.UpdateSecret(ctx, req)
 		if err != nil {
