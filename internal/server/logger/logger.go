@@ -24,6 +24,6 @@ func Init(logLevel string) {
 		Level: level,
 	}
 	// Setup logging.
-	Logger = slog.New(slog.NewTextHandler(os.Stderr, opts))
+	Logger = slog.New(slog.NewJSONHandler(os.Stderr, opts))
 	RPCLogger = Logger.With("service", "gRPC/server", "component", "grpc-component")
 }

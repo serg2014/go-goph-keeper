@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
@@ -52,15 +51,12 @@ func (app *ClientApp) Sync(ctx context.Context) (*SyncStatus, []error) {
 
 	err := app.syncCreateSecretOnServer(ctx, syncStatus)
 	errorList = append(errorList, err)
-	time.Sleep(100 * time.Microsecond)
 
 	err = app.syncUpdateSecretOnServer(ctx, syncStatus)
 	errorList = append(errorList, err)
-	time.Sleep(100 * time.Microsecond)
 
 	err = app.syncDeleteSecretOnServer(ctx, syncStatus)
 	errorList = append(errorList, err)
-	time.Sleep(100 * time.Microsecond)
 
 	err = app.syncFromServer(ctx, syncStatus)
 	errorList = append(errorList, err)
@@ -73,6 +69,10 @@ func (app *ClientApp) syncCreateSecretOnServer(ctx context.Context, syncStatus *
 	list, err := app.store.GetSecretsIDsForCreate(ctx)
 	if err != nil {
 		return err
+	}
+
+	if len(list) == 0 {
+		return nil
 	}
 
 	// Устанавливаем соединение стрима
@@ -187,6 +187,10 @@ func (app *ClientApp) syncUpdateSecretOnServer(ctx context.Context, syncStatus *
 		return err
 	}
 
+	if len(list) == 0 {
+		return nil
+	}
+
 	// Устанавливаем соединение стрима
 	logger.Logger.Debug("connect to grpc UpdateSecrets")
 	stream, err := app.grpcKeep.UpdateSecrets(ctx)
@@ -297,6 +301,10 @@ func (app *ClientApp) syncDeleteSecretOnServer(ctx context.Context, syncStatus *
 	list, err := app.store.GetSecretsIDsForServerDelete(ctx)
 	if err != nil {
 		return err
+	}
+
+	if len(list) == 0 {
+		return nil
 	}
 
 	// Устанавливаем соединение стрима
@@ -454,7 +462,7 @@ func (app *ClientApp) secretsListInfoWithRetry(ctx context.Context) (models.Secr
 				logger.RPCLogger.Debug(fmt.Sprintf("Recv get error: %v", err))
 			}
 			if err == io.EOF {
-				logger.RPCLogger.Debug("no more responses")
+				logger.RPCLogger.Debug(fmt.Sprintf("no more responses. resp: %v", resp))
 				return serverInfo, nil
 			}
 			if errors.Is(err, auth.ErrNeedRetry) {
