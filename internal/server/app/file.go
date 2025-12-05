@@ -281,6 +281,11 @@ func (app *MyApp) GetFileSecret(ctx context.Context, stream grpc.BidiStreamingSe
 		return err
 	}
 
+	err = app.store.CanGetSecret(ctx, *userID, req.Id)
+	if err != nil {
+		return err
+	}
+
 	// отдаем  файл
 	err = app.downloadFile(ctx, stream, req, userID)
 	if err != nil {

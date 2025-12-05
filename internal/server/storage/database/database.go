@@ -10,6 +10,7 @@ import (
 	"github.com/golang-migrate/migrate"
 	"github.com/golang-migrate/migrate/database/postgres"
 	_ "github.com/golang-migrate/migrate/source/file"
+	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -397,4 +398,21 @@ func (s *storageDB) GetSecret(ctx context.Context, userID models.UserID, secret_
 	}
 
 	return resp, nil
+}
+
+func (s *storageDB) CanGetSecret(ctx context.Context, userID models.UserID, secret_id string) error {
+	query := `SELECT id
+	FROM secrets
+	WHERE user_id=$1 and id=$2`
+	row := s.db.QueryRowContext(ctx, query, userID, secret_id)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return storage.ErrNoAccess
+		}
+		return err
+	}
+
+	return nil
 }

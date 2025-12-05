@@ -16,6 +16,7 @@ var (
 	ErrDataExists       = errors.New("data exists")
 	ErrMetaAndDataEmpty = errors.New("meta and data emty")
 	ErrConflict         = errors.New("conflict")
+	ErrNoAccess         = errors.New("no access")
 )
 
 // Storager interface
@@ -28,4 +29,5 @@ type Storager interface {
 	DeleteSecret(ctx context.Context, userID models.UserID, req *pb.DeleteSecretRequest) (*pb.DeleteSecretResponse, error)
 	GetSecretsListInfo(ctx context.Context, userID models.UserID) ([]*pb.SecretsListResponse, error)
 	GetSecret(ctx context.Context, userID models.UserID, secret_id string) (*pb.GetSecretsResponse, error)
+	CanGetSecret(ctx context.Context, userID models.UserID, secret_id string) error
 }

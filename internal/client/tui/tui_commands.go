@@ -17,7 +17,6 @@ var (
 	ErrSecretType = errors.New("unknown secret type")
 )
 
-// TODO когда нет секретов нет возможности выйти из меню.
 func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 	sec := &models.Secret{}
 
@@ -42,11 +41,21 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 				Title("List of secrets").
 				Options(opts...).
 				Value(&sec),
-		),
+		).WithHideFunc(func() bool {
+			return len(secrets) == 0
+		}),
+		huh.NewGroup(
+			huh.NewNote().Description("No secrets"),
+		).WithHideFunc(func() bool {
+			return len(secrets) != 0
+		}),
 	)
 	err = form.Run()
 	if err != nil {
 		return err
+	}
+	if sec.Type == models.SecretTypeUnknown {
+		return nil
 	}
 
 	secret, err := app.GetSecret(ctx, sec.ID)
