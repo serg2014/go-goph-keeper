@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 
 	"github.com/google/uuid"
@@ -481,7 +482,18 @@ func (app *ClientApp) createSecretFromServer(ctx context.Context, info *pb.Secre
 		return err
 	}
 
+	// скачать файл
+	if info.Type == int32(models.SecretTypeFile) {
+		err = app.downloadFile(ctx, stream, info.Id)
+		if err != nil {
+			return err
+		}
+		tmpPath := app.SecretFilePath(info.Id) + ".tmp"
+		defer os.Remove(tmpPath)
+	}
+
 	logger.Logger.Debug(fmt.Sprintf("try get secret from server id: %s", info.Id))
+
 	// получить секрет с сервера
 	resp, err := app.getSecretsWithRetry(ctx, stream, info)
 	if err != nil {
@@ -491,6 +503,11 @@ func (app *ClientApp) createSecretFromServer(ctx context.Context, info *pb.Secre
 	err = app.store.ForceCreateSecret(ctx, resp)
 	if err != nil {
 		return err
+	}
+
+	if info.Type == int32(models.SecretTypeFile) {
+		tmpPath := app.SecretFilePath(info.Id) + ".tmp"
+		os.Rename(tmpPath, app.SecretFilePath(info.Id))
 	}
 
 	stream.CloseSend()
@@ -545,6 +562,16 @@ func (app *ClientApp) updateSecretFromServer(ctx context.Context, info *pb.Secre
 		return err
 	}
 
+	// скачать файл
+	if info.Type == int32(models.SecretTypeFile) {
+		err = app.downloadFile(ctx, stream, info.Id)
+		if err != nil {
+			return err
+		}
+		tmpPath := app.SecretFilePath(info.Id) + ".tmp"
+		defer os.Remove(tmpPath)
+	}
+
 	logger.Logger.Debug(fmt.Sprintf("try get secret from server id: %s", info.Id))
 	// получить секрет с сервера
 	resp, err := app.getSecretsWithRetry(ctx, stream, info)
@@ -555,6 +582,11 @@ func (app *ClientApp) updateSecretFromServer(ctx context.Context, info *pb.Secre
 	err = app.store.ForceUpdateSecret(ctx, resp)
 	if err != nil {
 		return err
+	}
+
+	if info.Type == int32(models.SecretTypeFile) {
+		tmpPath := app.SecretFilePath(info.Id) + ".tmp"
+		os.Rename(tmpPath, app.SecretFilePath(info.Id))
 	}
 
 	stream.CloseSend()

@@ -3,13 +3,19 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"sync"
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/server/auth"
 	"github.com/serg2014/go-goph-keeper/internal/server/config"
+	"github.com/serg2014/go-goph-keeper/internal/server/logger"
 	"github.com/serg2014/go-goph-keeper/internal/server/models"
 	"github.com/serg2014/go-goph-keeper/internal/server/storage"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type MyApp struct {
@@ -63,9 +69,9 @@ func (app *MyApp) DeleteSecret(ctx context.Context, req *pb.DeleteSecretRequest)
 	}
 
 	if req.IsFile {
-		// если файл уже загружается выходим
+		// если секрет уже синхронизируется выходим
 		if !app.getUploadFlag(req.Id) {
-			return nil, ErrFileUploading
+			return nil, ErrSecretSyncing
 		}
 		defer app.cleanUploadFlag(req.Id)
 	}
@@ -99,4 +105,39 @@ func (app *MyApp) GetSecret(ctx context.Context, req *pb.GetSecretsRequest) (*pb
 		return nil, err
 	}
 	return app.store.GetSecret(ctx, *userID, req.Id)
+}
+
+func (app *MyApp) GetSecrets(stream grpc.BidiStreamingServer[pb.GetSecretsRequest, pb.GetSecretsResponse]) error {
+	for {
+		ctx := stream.Context()
+		req, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			code := codes.Unknown
+			return status.Errorf(code, "cannot receive stream request: %v", err)
+		}
+		logger.Logger.Info(fmt.Sprintf("got req: %+v", req))
+
+		if req.File != nil {
+			// отдаем данные файла и секрета в отдельном методе
+			err = app.GetFileSecret(ctx, stream, req)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		res, err := app.GetSecret(ctx, req)
+		if err != nil {
+			return err
+		}
+
+		err = stream.Send(res)
+		if err != nil {
+			code := codes.Unknown
+			return status.Errorf(code, "cannot send stream response: %v", err)
+		}
+	}
 }

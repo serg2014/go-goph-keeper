@@ -345,9 +345,10 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 }
 
 func (s *storageDB) GetSecretsListInfo(ctx context.Context, userID models.UserID) ([]*pb.SecretsListResponse, error) {
-	query := `SELECT m.secret_id, m.version as meta_version, d.version as data_version
-	FROM meta as m
-	JOIN data as d ON d.secret_id = m.secret_id
+	query := `SELECT s.type, m.secret_id, m.version as meta_version, d.version as data_version
+	FROM secrets as s
+	JOIN meta as m ON s.id = m.secret_id
+	JOIN data as d ON s.id = d.secret_id
 	WHERE m.user_id=$1`
 	rows, err := s.db.QueryContext(ctx, query, userID)
 	if err != nil {
@@ -359,7 +360,7 @@ func (s *storageDB) GetSecretsListInfo(ctx context.Context, userID models.UserID
 	list := make([]*pb.SecretsListResponse, 0)
 	for rows.Next() {
 		var item pb.SecretsListResponse
-		err = rows.Scan(&item.Id, &item.MetaVersion, &item.DataVersion)
+		err = rows.Scan(&item.Type, &item.Id, &item.MetaVersion, &item.DataVersion)
 		if err != nil {
 			return nil, err
 		}

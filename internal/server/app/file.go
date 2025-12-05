@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sync"
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/server/auth"
@@ -18,11 +19,21 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var (
-	ErrFileUploading = errors.New("fioe already uploading")
+const (
+	MaxChunkSize = 128 * 1024 // 128kb
 )
 
-// Получить или создать мьютекс для файла
+var bufPool = sync.Pool{
+	New: func() any {
+		return &bytes.Buffer{}
+	},
+}
+
+var (
+	ErrSecretSyncing = errors.New("fioe already uploading")
+)
+
+// Получить или создать мьютекс для секрета
 func (app *MyApp) getUploadFlag(secret_id string) bool {
 	app.mapMutex.Lock()
 	defer app.mapMutex.Unlock()
@@ -56,9 +67,9 @@ func (app *MyApp) deleteSecretFile(userID *models.UserID, secret_id string) erro
 }
 
 func (app *MyApp) CreateFileSecret(ctx context.Context, stream grpc.BidiStreamingServer[pb.CreateSecretRequest, pb.CreateSecretResponse], req *pb.CreateSecretRequest) error {
-	// если файл уже загружается выходим
+	// если секрет уже синхронизируется выходим
 	if !app.getUploadFlag(req.Secret.Id) {
-		return ErrFileUploading
+		return ErrSecretSyncing
 	}
 	defer app.cleanUploadFlag(req.Secret.Id)
 
@@ -157,9 +168,9 @@ func (app *MyApp) uploadFile(
 }
 
 func (app *MyApp) UpdateFileSecret(ctx context.Context, stream grpc.BidiStreamingServer[pb.UpdateSecretRequest, pb.UpdateSecretResponse], req *pb.UpdateSecretRequest) error {
-	// если файл уже загружается выходим
+	// если секрет уже синхронизируется выходим
 	if !app.getUploadFlag(req.Id) {
-		return ErrFileUploading
+		return ErrSecretSyncing
 	}
 	defer app.cleanUploadFlag(req.Id)
 
@@ -256,4 +267,115 @@ func (app *MyApp) uploadFileForUpdate(
 		}
 	}
 	return nil
+}
+
+func (app *MyApp) GetFileSecret(ctx context.Context, stream grpc.BidiStreamingServer[pb.GetSecretsRequest, pb.GetSecretsResponse], req *pb.GetSecretsRequest) error {
+	// если секрет уже синхронизируется выходим
+	if !app.getUploadFlag(req.Id) {
+		return ErrSecretSyncing
+	}
+	defer app.cleanUploadFlag(req.Id)
+
+	userID, err := auth.GetUserIDFromContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	// отдаем  файл
+	err = app.downloadFile(ctx, stream, req, userID)
+	if err != nil {
+		return err
+	}
+	// отправить секрет
+	res, err := app.GetSecret(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	err = stream.Send(res)
+	if err != nil {
+		code := codes.Unknown
+		return status.Errorf(code, "cannot send stream response: %v", err)
+	}
+
+	return nil
+}
+
+func (app *MyApp) downloadFile(
+	ctx context.Context,
+	stream grpc.BidiStreamingServer[pb.GetSecretsRequest, pb.GetSecretsResponse],
+	req *pb.GetSecretsRequest,
+	userID *models.UserID,
+) error {
+	secret_id := req.Id
+	filePath := app.SecretFilePath(userID, secret_id)
+
+	fileR, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer fileR.Close()
+
+	fileInfo, err := fileR.Stat()
+	if err != nil {
+		return err
+	}
+
+	if fileInfo.Size() <= req.File.Offset {
+		return nil
+	}
+
+	_, err = fileR.Seek(req.File.Offset, io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	buf, _ := bufPool.Get().(*bytes.Buffer)
+	defer func() {
+		buf.Reset()
+		bufPool.Put(buf)
+	}()
+
+	buf.Grow(MaxChunkSize)
+
+	copyData := func(w io.Writer) (int64, error) {
+		n, err := io.CopyN(w, fileR, int64(MaxChunkSize))
+		if err != nil && n <= 0 {
+			if err == io.EOF {
+				return n, io.EOF
+			}
+			return n, status.Error(codes.Internal, err.Error())
+		}
+		return n, nil
+	}
+
+	for {
+		n, err := copyData(buf)
+		if err != nil && n <= 0 {
+			if err == io.EOF {
+				// все отправили. надо отправить клиенту признак конца
+				err = stream.Send(&pb.GetSecretsResponse{})
+				if err != nil {
+					return err
+				}
+				return nil
+			}
+			return status.Error(codes.Internal, err.Error())
+		}
+
+		err = stream.Send(&pb.GetSecretsResponse{
+			Id: secret_id,
+			File: &pb.StreamFileResponse{
+				Chunk: buf.Bytes(),
+			},
+		})
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return status.Error(codes.Internal, err.Error())
+		}
+		buf.Reset()
+	}
+
 }

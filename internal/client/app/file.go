@@ -207,3 +207,69 @@ func (app *ClientApp) uploadFileForUpdate(ctx context.Context, stream grpc.BidiS
 	logger.RPCLogger.Debug(fmt.Sprintf("uploadFile error: %v", err))
 	return err
 }
+
+func (app *ClientApp) downloadFile(ctx context.Context, stream grpc.BidiStreamingClient[pb.GetSecretsRequest, pb.GetSecretsResponse], secret_id string) error {
+	tmpPath := app.SecretFilePath(secret_id) + ".tmp"
+	fileW, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	defer fileW.Close()
+
+	offset := int64(0)
+	_, err = fileW.Seek(offset, io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	var chunkReader io.Reader
+	for range maxRetries {
+		err = stream.Send(&pb.GetSecretsRequest{
+			Id: secret_id,
+			File: &pb.StreamFileRequest{
+				Offset: offset,
+			},
+		})
+		if err != nil {
+			logger.RPCLogger.Debug(fmt.Sprintf("Send get error: %v", err))
+			if errors.Is(err, auth.ErrNeedRetry) {
+				break // переходим к следующей попытке
+			}
+			// io.EOF тут невозможен в нормальной ситуации
+			// io.EOF возможен на первом Send, когда сервер закрыл соединение раньше чем клиент сделал Send
+			// например при проверка авторизации
+			// в остальных случаях это сетевые ошибки.
+			// игнорируем их, получим ошибку из Recv
+			if !errors.Is(err, io.EOF) {
+				return fmt.Errorf("cannot send stream request: %v", err)
+			}
+		}
+		for {
+			resp, err := stream.Recv()
+			if err != nil {
+				logger.RPCLogger.Debug(fmt.Sprintf("Recv get error: %v", err))
+
+				if errors.Is(err, auth.ErrNeedRetry) {
+					break // переходим к следующей попытке
+				}
+				// io.EOF тут невозможен в нормальной ситуации
+				return fmt.Errorf("cannot receive stream response: %v", err)
+			}
+			logger.RPCLogger.Debug(fmt.Sprintf("downloadFile received response: %v", resp))
+
+			// дочитали файл до конца
+			if resp.Id == "" {
+				logger.Logger.Debug("read file end")
+				return nil
+			}
+
+			chunkReader = bytes.NewReader(resp.File.Chunk)
+			n, err := io.Copy(fileW, chunkReader)
+			if err != nil {
+				return err
+			}
+			offset += n
+		}
+	}
+	return nil
+}
