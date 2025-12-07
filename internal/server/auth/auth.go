@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	accessTokenExpire  = 1 * time.Minute
+	accessTokenExpire  = 15 * time.Minute
 	refreshTokenExpire = 1 * time.Hour
 	// TODO from env
 	secretForToken = "secretfortoken"
