@@ -71,12 +71,12 @@ type Data struct {
 	LoginPassword *LoginPassword `json:"login_password,omitempty"`
 	CreditCard    *CreditCard    `json:"credit_card,omitempty"`
 	Text          string         `json:"-"`
-	FilePath      FilePath       `json:"file_path,omitempty"`
+	FilePath      *FilePath      `json:"file_path,omitempty"`
 }
 
 type FilePath struct {
 	Path     string `json:"-"`
-	OrigName string `json:"orig_name"`
+	OrigName string `json:"orig_name,omitempty"`
 	OldPath  string `json:"-"`
 	TmpPath  string `json:"-"`
 }

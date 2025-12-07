@@ -48,6 +48,9 @@ func tuiFormAddOrEditSecret(secret *models.Secret, save *bool, isAddForm bool, f
 	case models.SecretTypeText:
 		form = tuiFormText(secret, save, isAddForm)
 	case models.SecretTypeFile:
+		if secret.Data.FilePath == nil {
+			secret.Data.FilePath = &models.FilePath{}
+		}
 		form = tuiFormFile(secret, save, isAddForm, fn)
 	default:
 		return nil, ErrSecretType

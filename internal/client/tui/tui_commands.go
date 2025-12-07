@@ -82,7 +82,7 @@ func showSecretsList(ctx context.Context, app *app.ClientApp) error {
 		return err
 	}
 
-	if secret.Data.FilePath.TmpPath != "" {
+	if secret.Type == models.SecretTypeFile && secret.Data.FilePath.TmpPath != "" {
 		os.Remove(secret.Data.FilePath.TmpPath)
 	}
 	if save {
