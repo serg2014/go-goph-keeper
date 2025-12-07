@@ -10,7 +10,13 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/google/uuid"
 	"github.com/serg2014/go-goph-keeper/internal/client/app"
+	"github.com/serg2014/go-goph-keeper/internal/client/logger"
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
+)
+
+var (
+	Version   string
+	BuildTime string
 )
 
 var (
@@ -173,4 +179,19 @@ func showSyncMenu(ctx context.Context, app *app.ClientApp) error {
 	}
 
 	return nil
+}
+
+func showVersion(ctx context.Context, app *app.ClientApp) error {
+	desc := fmt.Sprintf("Version: %s\nBuild time: %s", Version, BuildTime)
+	logger.Logger.Debug(desc)
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("Version").
+				DescriptionFunc(func() string {
+					return desc
+				}, &desc),
+		),
+	)
+	return form.Run()
 }

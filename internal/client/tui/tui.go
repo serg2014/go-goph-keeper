@@ -21,6 +21,7 @@ const (
 	CommandTypeList CommandType = iota
 	CommandTypeAddSecret
 	CommandTypeSync
+	CommandTypeVersion
 	CommandTypeQuit
 	CommandTypeMax // Must be last
 )
@@ -33,6 +34,8 @@ func (c CommandType) String() string {
 		return "add new secret"
 	case CommandTypeSync:
 		return "sync"
+	case CommandTypeVersion:
+		return "version"
 	case CommandTypeQuit:
 		return "quit"
 	default:
@@ -44,6 +47,7 @@ var cmds = map[CommandType]func(ctx context.Context, app *app.ClientApp) error{
 	CommandTypeList:      showSecretsList,
 	CommandTypeAddSecret: addSecret,
 	CommandTypeSync:      showSyncMenu,
+	CommandTypeVersion:   showVersion,
 	CommandTypeQuit: func(context.Context, *app.ClientApp) error {
 		fmt.Println(
 			lipgloss.NewStyle().
