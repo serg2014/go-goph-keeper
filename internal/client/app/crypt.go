@@ -1,49 +1,97 @@
 package app
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
 
 	"github.com/google/uuid"
+	"github.com/serg2014/go-goph-keeper/internal/client/logger"
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
 )
 
-// TODO
-func crypt(in []byte) error {
-	return nil
-}
+const nonceSize = aes.BlockSize
+const hmacSize = sha256.Size
+const metadataSize = nonceSize + hmacSize
 
-// TODO
-func decrypt(in []byte) error {
-	return nil
-}
+// TODO вынести в env
+var Password = "test"
 
-type CryptFile struct {
-	file *os.File
-}
+var (
+	ErrFileTooSmall = errors.New("file too smal")
+)
 
-func NewCryptFile(file *os.File) *CryptFile {
-	return &CryptFile{file: file}
-}
-
-func (c *CryptFile) Write(p []byte) (int, error) {
-	err := crypt(p)
-	if err != nil {
-		return 0, err
+func generateKey(size int) ([]byte, error) {
+	key := make([]byte, size)
+	if _, err := rand.Read(key); err != nil {
+		return nil, err
 	}
-	return c.file.Write(p)
+	return key, nil
 }
 
-func (c *CryptFile) Read(p []byte) (int, error) {
-	err := decrypt(p)
+func prepareCrypt() (cipher.AEAD, error) {
+	// ключ из password, используя sha256.Sum256
+	key := sha256.Sum256([]byte(Password))
+
+	// NewCipher создает и возвращает новый cipher.Block.
+	// Ключевым аргументом должен быть ключ AES, 16, 24 или 32 байта
+	// для выбора AES-128, AES-192 или AES-256.
+	aesblock, err := aes.NewCipher(key[:])
 	if err != nil {
-		return 0, err
+		logger.Logger.Error("NewCipher", slog.String("error", err.Error()))
+		return nil, err
 	}
-	return c.file.Read(p)
+
+	aesgcm, err := cipher.NewGCM(aesblock)
+	if err != nil {
+		logger.Logger.Error("NewGCM", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	return aesgcm, nil
+}
+
+func crypt(in []byte) ([]byte, error) {
+	aesgcm, err := prepareCrypt()
+	if err != nil {
+		return nil, err
+	}
+
+	// создаём вектор инициализации
+	nonce, err := generateKey(aesgcm.NonceSize())
+	if err != nil {
+		return nil, err
+	}
+	// добавляем nonce в данные, первый аргумент
+	dst := aesgcm.Seal(nonce, nonce, in, nil) // зашифровываем
+	return dst, nil
+}
+
+func decrypt(in []byte) ([]byte, error) {
+	aesgcm, err := prepareCrypt()
+	if err != nil {
+		return nil, err
+	}
+
+	// достаем nonce из данных
+	nonce := in[:aesgcm.NonceSize()]
+	src, err := aesgcm.Open(nil, nonce, in[aesgcm.NonceSize():], nil) // расшифровываем
+	if err != nil {
+		logger.Logger.Error("aesgcm.Open", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	return src, nil
 }
 
 func (app *ClientApp) SecretFilePath(secret_id string) string {
@@ -67,12 +115,67 @@ func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFileName stri
 		return fmt.Errorf("%s: %w", cryptFilePath, err)
 	}
 	defer fileW.Close()
-	cryptFile := NewCryptFile(fileW)
 
-	_, err = io.Copy(cryptFile, fileR)
+	// ключ из password, используя sha256.Sum256
+	key := sha256.Sum256([]byte(Password))
+
+	// Настраиваем AES в режиме CTR
+	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return err
 	}
+
+	// Генерируем Nonce (IV) для CTR. В CTR это начальное значение счетчика.
+	// Nonce должен быть уникальным для каждой операции с данным ключом.
+	nonce, err := generateKey(aes.BlockSize)
+	if err != nil {
+		return err
+	}
+
+	// Записываем Nonce в начало файла назначения (открыто)
+	if _, err := fileW.Write(nonce); err != nil {
+		return err
+	}
+
+	// Настраиваем HMAC для вычисления подписи всего *зашифрованного* потока
+	mac := hmac.New(sha256.New, key[:])
+
+	// Мы создаем "цепь" io.Writer: srcFile -> CTR шифратор -> destFile И mac writer
+	// CTR шифратор будет записывать данные и в файл, и в HMAC sum.
+
+	// MultiWriter позволяет писать одновременно в destFile и в mac (hash generator)
+	// ВАЖНО: Мы начинаем считать HMAC с *зашифрованного* потока, который идет после Nonce.
+	hashedWriter := io.MultiWriter(fileW, mac)
+
+	// Создаем потоковый шифратор/дешифратор CTR
+	stream := cipher.NewCTR(block, nonce)
+
+	// Создаем Writer, который будет шифровать данные, проходящие через него
+	writer := cipher.StreamWriter{S: stream, W: hashedWriter}
+
+	// Копируем данные из источника через шифратор в назначение (потоково, чанками)
+	// io.Copy использует буфер для чтения чанками и записи их через writer
+	if _, err := io.Copy(writer, fileR); err != nil {
+		return fmt.Errorf("error stream cipher: %w", err)
+	}
+
+	// Закрываем writer, чтобы убедиться, что все буферы сброшены
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("error close writer: %w", err)
+	}
+
+	// Вычисляем итоговый HMAC тег и дописываем его в конец файла
+	finalHMAC := mac.Sum(nil)
+	if _, err := fileW.Write(finalHMAC); err != nil {
+		return fmt.Errorf("error write HMAC tag: %w", err)
+	}
+
+	// cryptFile := NewCryptFile(fileW)
+
+	// _, err = io.Copy(cryptFile, fileR)
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
@@ -83,7 +186,72 @@ func (app *ClientApp) DescryptFileFromLocalStorage(cryptPath string, origName st
 		return "", err
 	}
 	defer fileR.Close()
-	cryptFile := NewCryptFile(fileR)
+
+	stat, err := fileR.Stat()
+	if err != nil {
+		return "", err
+	}
+	if stat.Size() < metadataSize {
+		return "", ErrFileTooSmall
+	}
+
+	// ключ из password, используя sha256.Sum256
+	key := sha256.Sum256([]byte(Password))
+
+	// 1. Читаем Nonce
+	nonce := make([]byte, nonceSize)
+	if _, err := io.ReadFull(fileR, nonce); err != nil {
+		return "", fmt.Errorf("error nonce: %w", err)
+	}
+	// 2. Определяем длину зашифрованного тела данных и тега HMAC
+	encryptedDataLen := stat.Size() - int64(metadataSize)
+
+	// Оставшийся читатель для всего тела файла, включая HMAC в конце
+	remainingReader := fileR
+
+	// 3. Создаем Reader, который читает *только* данные для HMAC проверки
+	// (без Nonce и без самого тега HMAC)
+	hmacDataReader := io.LimitReader(remainingReader, encryptedDataLen)
+
+	// 4. Вычисляем HMAC "на лету" во время чтения.
+	// Здесь мы вынуждены прочитать *всю* часть данных в "никуда" (io.Discard)
+	// только для того, чтобы убедиться, что они прошли через хеш-функцию HMAC.
+	mac := hmac.New(sha256.New, key[:])
+
+	// io.Copy использует внутренний буфер (чанки) для перемещения данных
+	_, err = io.Copy(mac, hmacDataReader)
+	if err != nil {
+		return "", fmt.Errorf("error hmac: %w", err)
+	}
+
+	// 5. Читаем ожидаемый тег HMAC из конца файла (мы находимся в нужной позиции благодаря io.Copy)
+	expectedHMAC := make([]byte, hmacSize)
+	if _, err := io.ReadFull(remainingReader, expectedHMAC); err != nil {
+		return "", fmt.Errorf("error hmac tag: %w", err)
+	}
+
+	// 6. ПРОВЕРКА АУТЕНТИЧНОСТИ: Сравниваем
+	calculatedHMAC := mac.Sum(nil)
+	if !hmac.Equal(calculatedHMAC, expectedHMAC) {
+		return "", fmt.Errorf("hmac tag not equal")
+	}
+
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return "", err
+	}
+	stream := cipher.NewCTR(block, nonce)
+
+	// Переходим на позицию сразу после Nonce
+	if _, err := fileR.Seek(int64(nonceSize), io.SeekStart); err != nil {
+		return "", fmt.Errorf("error seek: %w", err)
+	}
+
+	// Ограничиваем чтение только зашифрованными данными (без HMAC тега в конце)
+	decryptionDataReader := io.LimitReader(fileR, encryptedDataLen)
+
+	// Создаем Writer, который будет расшифровывать данные потоком
+	reader := cipher.StreamReader{S: stream, R: decryptionDataReader}
 
 	path := path.Join(app.config.TmpDirPath(), origName)
 	absPath, err := filepath.Abs(path)
@@ -97,7 +265,11 @@ func (app *ClientApp) DescryptFileFromLocalStorage(cryptPath string, origName st
 	}
 	defer fileW.Close()
 
-	io.Copy(fileW, cryptFile)
+	// 8. Копируем расшифрованные чанки из Reader'а в файл назначения
+	if _, err := io.Copy(fileW, reader); err != nil {
+		return "", fmt.Errorf("error write decrypt data: %w", err)
+	}
+
 	return absPath, nil
 }
 
@@ -172,20 +344,22 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 	}
 
 	if len(secretDB.Data) != 0 {
-		err = crypt(secretDB.Data)
+		data, err := crypt(secretDB.Data)
 		if err != nil {
 			return err
 		}
+		secretDB.Data = data
 	}
 	return nil
 }
 
 func (app *ClientApp) transformDBToData(secret *models.Secret, secretDB *models.SecretDB) error {
 	if len(secretDB.Data) != 0 {
-		err := decrypt(secretDB.Data)
+		data, err := decrypt(secretDB.Data)
 		if err != nil {
 			return fmt.Errorf("decrypt secret.data: %w", err)
 		}
+		secretDB.Data = data
 	}
 
 	switch secret.Type {
@@ -215,19 +389,20 @@ func (app *ClientApp) transformMetaToDB(secret *models.Secret, secretDB *models.
 	if err != nil {
 		return err
 	}
-	err = crypt(secretDB.Meta)
+	data, err := crypt(secretDB.Meta)
 	if err != nil {
 		return err
 	}
+	secretDB.Meta = data
 	return nil
 }
 
 func (app *ClientApp) transformDBToMeta(secret *models.Secret, secretDB *models.SecretDB) error {
-	var err error
-	err = decrypt(secretDB.Meta)
+	data, err := decrypt(secretDB.Meta)
 	if err != nil {
 		return err
 	}
+	secretDB.Meta = data
 
 	err = json.Unmarshal(secretDB.Meta, &secret.Meta)
 	if err != nil {
