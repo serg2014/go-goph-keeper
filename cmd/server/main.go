@@ -36,7 +36,7 @@ import (
 	"github.com/serg2014/go-goph-keeper/internal/server/auth"
 	"github.com/serg2014/go-goph-keeper/internal/server/config"
 	"github.com/serg2014/go-goph-keeper/internal/server/logger"
-	"github.com/serg2014/go-goph-keeper/internal/server/storage/database"
+	"github.com/serg2014/go-goph-keeper/internal/server/storage"
 )
 
 //go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative proto/keeper.proto
@@ -68,12 +68,12 @@ func run() error {
 	logger.Init(conf.LogLevel)
 
 	ctx := context.Background()
-	storage, err := database.NewStorageDB(ctx, conf.DatabaseDSN)
+	stor, err := storage.NewStorageDB(ctx, conf.DatabaseDSN)
 	if err != nil {
 		return err
 	}
-	defer storage.Close()
-	app := app.NewApp(storage, conf)
+	defer stor.Close()
+	app := app.NewApp(stor, conf)
 
 	grpcPanicRecoveryHandler := func(p any) (err error) {
 		logger.RPCLogger.Error("recovered from panic", "panic", p, "stack", debug.Stack())

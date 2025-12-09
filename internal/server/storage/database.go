@@ -1,4 +1,4 @@
-package database
+package storage
 
 import (
 	"context"
@@ -18,14 +18,13 @@ import (
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/server/logger"
 	"github.com/serg2014/go-goph-keeper/internal/server/models"
-	"github.com/serg2014/go-goph-keeper/internal/server/storage"
 )
 
 type storageDB struct {
 	db *sql.DB
 }
 
-func NewStorageDB(ctx context.Context, dsn string) (storage.Storager, error) {
+func NewStorageDB(ctx context.Context, dsn string) (Storager, error) {
 	// dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
 	//  `localhost`, `video`, `XXXXXXXX`, `video`)
 	db, err := sql.Open("pgx", dsn)
@@ -82,7 +81,7 @@ func (s *storageDB) CreateUser(ctx context.Context, login, passwordHash string) 
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
 			if pgErr.Code == pgerrcode.UniqueViolation {
-				return nil, storage.ErrUserExists
+				return nil, ErrUserExists
 			}
 		}
 		return nil, fmt.Errorf("failed CreateUser. can not insert users: %w", err)
@@ -102,7 +101,7 @@ func (s *storageDB) GetUser(ctx context.Context, login, passwordHash string) (*m
 	err := row.Scan(&userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, storage.ErrUserOrPassword
+			return nil, ErrUserOrPassword
 		}
 		return nil, fmt.Errorf("failed GetUser. can not select: %w", err)
 	}
@@ -180,7 +179,7 @@ func (s *storageDB) UpdateSecret(ctx context.Context, userID models.UserID, req 
 	defer tx.Rollback()
 
 	if req.Meta == nil && req.Data == nil {
-		return nil, storage.ErrMetaAndDataEmpty
+		return nil, ErrMetaAndDataEmpty
 	}
 
 	res := pb.UpdateSecretResponse{
@@ -299,7 +298,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 			// TODO сюда попадаем когда секрет на сервере был удален раньше чем локально
 			// либо нам прислали кривой секрет(попытка взлома)
 			// ничего страшного, пусть клиент удаляет у себя(он уже удалил)
-			return res, storage.ErrConflict
+			return res, ErrConflict
 		}
 		return nil, fmt.Errorf("delete secret. failed select for update meta and data: %w", err)
 	}
@@ -315,7 +314,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 	}
 	if ra == 0 {
 		res.Conflict = true
-		return res, storage.ErrConflict
+		return res, ErrConflict
 	}
 
 	query = `DELETE FROM data WHERE user_id=$1 and secret_id=$2 and version=$3`
@@ -329,7 +328,7 @@ func (s *storageDB) DeleteSecret(ctx context.Context, userID models.UserID, req 
 	}
 	if ra == 0 {
 		res.Conflict = true
-		return res, storage.ErrConflict
+		return res, ErrConflict
 	}
 
 	query = `DELETE FROM secrets WHERE user_id=$1 and id=$2`
@@ -409,7 +408,7 @@ func (s *storageDB) CanGetSecret(ctx context.Context, userID models.UserID, secr
 	err := row.Scan(&id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return storage.ErrNoAccess
+			return ErrNoAccess
 		}
 		return err
 	}
