@@ -1,5 +1,7 @@
 package main
 
+//go:generate bash -c "cp ../../server.crt ./server.crt"
+
 import (
 	"context"
 	"errors"
@@ -8,9 +10,12 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+
+	_ "embed"
 
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/client/app"
@@ -21,6 +26,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
+
+//go:embed server.crt
+var Cert []byte
 
 var (
 	ErrTmpDir = errors.New("can not create tmp dir")
@@ -70,7 +78,14 @@ func run() error {
 
 	app := app.NewApp(store, conf)
 
-	tlsCreds, err := generateTLSCreds()
+	// сохраняем сертификат в рабочую директорию
+	certFile := filepath.Join(conf.WorkingDir, "server.crt")
+	if err := os.WriteFile(certFile, Cert, 0600); err != nil {
+		return fmt.Errorf("can not write server.crt: %v", err)
+	}
+	defer os.RemoveAll(certFile)
+
+	tlsCreds, err := credentials.NewClientTLSFromFile(certFile, "")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,13 +122,6 @@ func run() error {
 	}
 
 	return nil
-}
-
-func generateTLSCreds() (credentials.TransportCredentials, error) {
-	// TODO Здесь нужно указать полный путь к файлу
-	certFile := "server.crt"
-
-	return credentials.NewClientTLSFromFile(certFile, "")
 }
 
 func initWorkSpace(c *config.Config) error {
