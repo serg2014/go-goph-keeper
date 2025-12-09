@@ -167,13 +167,6 @@ func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFileName stri
 		return fmt.Errorf("error write HMAC tag: %w", err)
 	}
 
-	// cryptFile := NewCryptFile(fileW)
-
-	// _, err = io.Copy(cryptFile, fileR)
-	// if err != nil {
-	// 	return err
-	// }
-
 	return nil
 }
 

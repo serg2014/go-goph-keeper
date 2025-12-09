@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	MaxChunkSize = 500 //128 * 1024 // 128kb
+	MaxChunkSize = 128 * 1024 // 128kb
 )
 
 func (app *ClientApp) uploadFile(ctx context.Context, stream grpc.BidiStreamingClient[pb.CreateSecretRequest, pb.CreateSecretResponse], secret_id uuid.UUID) error {
