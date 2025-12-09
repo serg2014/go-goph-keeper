@@ -3,19 +3,23 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"fmt"
 	"log/slog"
 
-	"github.com/golang-migrate/migrate"
-	_ "github.com/golang-migrate/migrate/database/sqlite3"
-	_ "github.com/golang-migrate/migrate/source/file"
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/sqlite3"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	pb "github.com/serg2014/go-goph-keeper/cmd/server/proto"
 	"github.com/serg2014/go-goph-keeper/internal/client/logger"
 	"github.com/serg2014/go-goph-keeper/internal/client/models"
-	// _ "modernc.org/sqlite"
 )
+
+//go:embed migrations/*.sql
+var embedMigrations embed.FS // Встраиваем все SQL-файлы из папки migrations
 
 type Action int
 
@@ -45,15 +49,23 @@ func NewStorageDB(ctx context.Context, path string) (Storager, error) {
 	// 	return nil, err
 	// }
 
-	// TODO file://migrations путь задается относительно cwd
-	// предполагается что запуск бинаря происходит в корне репозитория
-	m, err := migrate.New(
-		"file://migrations/client",
-		fmt.Sprintf("sqlite3://%s", path),
+	// Создаем источник миграций (source driver) на базе встроенной FS
+	// Путь "migrations" должен соответствовать пути, указанному в директиве //go:embed
+	sourceDriver, err := iofs.New(embedMigrations, "migrations")
+	if err != nil {
+		return nil, fmt.Errorf("cannot create source driver: %v", err)
+	}
+
+	// Создаем экземпляр migrate с использованием нашего источника и URL базы данных
+	m, err := migrate.NewWithSourceInstance(
+		"iofs",                            // Название схемы
+		sourceDriver,                      // Экземпляр драйвера источника
+		fmt.Sprintf("sqlite3://%s", path), // Строка подключения к БД
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot create migrate instance: %v", err)
 	}
+
 	if err = m.Up(); err != nil && err != migrate.ErrNoChange {
 		logger.Logger.Error("failed to apply migrations", slog.String("error", err.Error()))
 		return nil, err
