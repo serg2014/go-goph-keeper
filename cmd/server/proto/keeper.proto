@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package gophkeeper;
+
+option go_package = "github.com/serg2014/go-goph-keeper/cmd/server/proto";
+
+message RegisterUserRequest{
+    string login = 1;
+    string password = 2;
+}
+message JWTToken {
+    string token = 1;
+}
+message RegisterUserResponse{
+    JWTToken access = 1;
+    JWTToken refresh = 2;
+}
+message AuthUserRequest{
+    string login = 1;
+    string password = 2;
+}
+message AuthUserResponse{
+    JWTToken access = 1;
+    JWTToken refresh = 2;
+}
+
+message RenewAuthRequest{}
+message RenewAuthResponse {
+    JWTToken access = 1;
+    JWTToken refresh = 2;
+}
+service AuthService {
+    rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse);
+    rpc AuthUser(AuthUserRequest) returns (AuthUserResponse);
+    rpc RenewAuth(RenewAuthRequest) returns (RenewAuthResponse);
+}
+
+message PingRequest {}
+message PingResponse {}
+
+
+message SecretData {
+    int64 updated_at = 1;
+    bytes data = 2;
+}
+message Secret {
+    string id = 1;
+    int32 type = 2;
+    SecretData meta = 3;
+    SecretData data = 4;
+}
+message FileUpload {
+    bytes chunk = 1;
+}
+message CreateSecretRequest{
+    Secret secret = 1;
+    FileUpload file = 2;
+}
+
+message CreateSecretResponse{
+    string id = 1;
+    bool conflict = 2;
+}
+
+message UpdateRequestInfo {
+    int64 updated_at = 1;
+    int64 version = 2;
+    bytes data = 3;
+}
+message UpdateSecretRequest {
+    string id = 1;
+    UpdateRequestInfo meta = 2;
+    UpdateRequestInfo data = 3;
+    FileUpload file = 4;
+}
+
+message UpdateResponseInfo {
+    int64 version = 1;
+}
+message UpdateSecretResponse {
+    string id = 1;
+    bool conflict = 2;
+    UpdateResponseInfo meta = 3;
+    UpdateResponseInfo data = 4;
+}
+
+message DeleteSecretRequest {
+    string id = 1;
+    bool is_file = 2;
+    int64 meta_version = 3;
+    int64 data_version = 4;
+}
+message DeleteSecretResponse {
+    string id = 1;
+    bool conflict = 2;
+}
+
+message SecretsListRequest {
+}
+message SecretsListResponse {
+    string id = 1;
+    int32 type = 2;
+    int64 meta_version = 3;
+    int64 data_version = 4;    
+}
+
+message StreamFileRequest {
+    int64 offset = 1;
+}
+message StreamFileResponse {
+    bytes chunk = 1;
+}
+
+message GetSecretsRequest {
+    string id = 1;
+    StreamFileRequest file = 2;
+}
+
+message GetSecretsResponse {
+    string id = 1;
+    int32 type = 2;
+    GetSecretInfo meta = 3;
+    GetSecretInfo data = 4;
+    StreamFileResponse file = 5;
+}
+message GetSecretInfo {
+    int64 version = 1;
+    int64 updated_at = 2;
+    bytes data = 3;
+}
+service GophKeeperService {
+    rpc Ping(PingRequest) returns (PingResponse);
+    rpc CreateSecrets(stream CreateSecretRequest) returns (stream CreateSecretResponse);
+    rpc UpdateSecrets(stream UpdateSecretRequest) returns (stream UpdateSecretResponse);
+    rpc DeleteSecrets(stream DeleteSecretRequest) returns (stream DeleteSecretResponse);
+    rpc SecretsListInfo(SecretsListRequest) returns (stream SecretsListResponse);
+    rpc GetSecrets(stream GetSecretsRequest) returns (stream GetSecretsResponse);
+}

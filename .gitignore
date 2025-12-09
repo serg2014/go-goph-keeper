@@ -1,0 +1,20 @@
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Binaries
+cmd/server/server
+
+# macos
+.DS_Store
+
+# autogenereted proto
+cmd/server/proto/keeper.pb.go
+cmd/server/proto/keeper_grpc.pb.go
+
+# logs, db, ...
+goph-keeper-client-data/*
+
+server.key
