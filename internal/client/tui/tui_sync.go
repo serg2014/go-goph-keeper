@@ -21,7 +21,6 @@ const (
 	SyncMenuTypeSyncRealTime SyncMenuType = iota
 	SyncMenuTypeAuth
 	SyncMenuTypeRegister
-	SyncMenuTypeTest
 	SyncMenuTypeMax // Must be last
 )
 
@@ -33,8 +32,6 @@ func (s SyncMenuType) String() string {
 		return "auth on remote server"
 	case SyncMenuTypeSyncRealTime:
 		return "sync real time"
-	case SyncMenuTypeTest:
-		return "test uniry rpc Ping call"
 	default:
 		return ""
 	}
@@ -111,8 +108,6 @@ func tuiSyncForm(ctx context.Context, app *app.ClientApp, selectedMenu SyncMenuT
 		}
 		form := tuiFormSyncRealTime(syncStatus, errStr.String())
 		return form.Run()
-	case SyncMenuTypeTest:
-		return app.Ping(ctx)
 	default:
 		return ErrSyncMenuType
 	}
