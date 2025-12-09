@@ -28,10 +28,10 @@ type Config struct {
 	ConfigPath string `env:"CONFIG,unset" json:"-"`
 	// ServerAddress remote server to sync data
 	ServerAddress ServerAddress `env:"SERVER_ADDRESS" json:"server_address"`
-	// logDir path to logs
-	logDir string
 	// cwd current working directory
 	cwd string
+	// password for aes key and hmac
+	Password string `env:"PASSWORD,notEmpty" json:"-"`
 }
 
 type ServerAddress struct {
@@ -120,6 +120,7 @@ func (c *Config) Init() error {
 	flag.StringVar(&c.LogLevel, "l", c.LogLevel, "log level")
 	flag.StringVar(&c.ConfigPath, "config", "", "path to config(format json)")
 	flag.Var(&c.ServerAddress, "a", "remote server address")
+	flag.StringVar(&c.Password, "p", "", "password")
 	flag.Parse()
 
 	err := env.Parse(c)

@@ -24,9 +24,6 @@ const nonceSize = aes.BlockSize
 const hmacSize = sha256.Size
 const metadataSize = nonceSize + hmacSize
 
-// TODO вынести в env
-var Password = "test"
-
 var (
 	ErrFileTooSmall = errors.New("file too smal")
 )
@@ -39,9 +36,9 @@ func generateKey(size int) ([]byte, error) {
 	return key, nil
 }
 
-func prepareCrypt() (cipher.AEAD, error) {
+func (app *ClientApp) prepareCrypt() (cipher.AEAD, error) {
 	// ключ из password, используя sha256.Sum256
-	key := sha256.Sum256([]byte(Password))
+	key := sha256.Sum256([]byte(app.config.Password))
 
 	// NewCipher создает и возвращает новый cipher.Block.
 	// Ключевым аргументом должен быть ключ AES, 16, 24 или 32 байта
@@ -61,8 +58,8 @@ func prepareCrypt() (cipher.AEAD, error) {
 	return aesgcm, nil
 }
 
-func crypt(in []byte) ([]byte, error) {
-	aesgcm, err := prepareCrypt()
+func (app *ClientApp) crypt(in []byte) ([]byte, error) {
+	aesgcm, err := app.prepareCrypt()
 	if err != nil {
 		return nil, err
 	}
@@ -77,8 +74,8 @@ func crypt(in []byte) ([]byte, error) {
 	return dst, nil
 }
 
-func decrypt(in []byte) ([]byte, error) {
-	aesgcm, err := prepareCrypt()
+func (app *ClientApp) decrypt(in []byte) ([]byte, error) {
+	aesgcm, err := app.prepareCrypt()
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +114,7 @@ func (app *ClientApp) CopyFileToLocalStorage(filePath string, cryptFileName stri
 	defer fileW.Close()
 
 	// ключ из password, используя sha256.Sum256
-	key := sha256.Sum256([]byte(Password))
+	key := sha256.Sum256([]byte(app.config.Password))
 
 	// Настраиваем AES в режиме CTR
 	block, err := aes.NewCipher(key[:])
@@ -196,7 +193,7 @@ func (app *ClientApp) DescryptFileFromLocalStorage(cryptPath string, origName st
 	}
 
 	// ключ из password, используя sha256.Sum256
-	key := sha256.Sum256([]byte(Password))
+	key := sha256.Sum256([]byte(app.config.Password))
 
 	// 1. Читаем Nonce
 	nonce := make([]byte, nonceSize)
@@ -344,7 +341,7 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 	}
 
 	if len(secretDB.Data) != 0 {
-		data, err := crypt(secretDB.Data)
+		data, err := app.crypt(secretDB.Data)
 		if err != nil {
 			return err
 		}
@@ -355,7 +352,7 @@ func (app *ClientApp) transformDataToDB(secret *models.Secret, secretDB *models.
 
 func (app *ClientApp) transformDBToData(secret *models.Secret, secretDB *models.SecretDB) error {
 	if len(secretDB.Data) != 0 {
-		data, err := decrypt(secretDB.Data)
+		data, err := app.decrypt(secretDB.Data)
 		if err != nil {
 			return fmt.Errorf("decrypt secret.data: %w", err)
 		}
@@ -389,7 +386,7 @@ func (app *ClientApp) transformMetaToDB(secret *models.Secret, secretDB *models.
 	if err != nil {
 		return err
 	}
-	data, err := crypt(secretDB.Meta)
+	data, err := app.crypt(secretDB.Meta)
 	if err != nil {
 		return err
 	}
@@ -398,7 +395,7 @@ func (app *ClientApp) transformMetaToDB(secret *models.Secret, secretDB *models.
 }
 
 func (app *ClientApp) transformDBToMeta(secret *models.Secret, secretDB *models.SecretDB) error {
-	data, err := decrypt(secretDB.Meta)
+	data, err := app.decrypt(secretDB.Meta)
 	if err != nil {
 		return err
 	}
